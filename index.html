@@ -34,8 +34,6 @@
     <!-- Google Fonts & FontAwesome -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@500;600;700;800;900&family=Sora:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=Nunito:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- ================= FIREBASE (Auth + Firestore) ================= -->
     <!-- Loaded as an ES module so we can use the modern modular SDK. Everything it exposes is
          hung off window.fb so the rest of this file (a classic, non-module script) can call it.
@@ -1269,7 +1267,7 @@
                 <form id="loginForm" onsubmit="handleLoginSubmit(event)" class="glass-panel p-6 sm:p-8 rounded-2xl border border-brand-border space-y-4 animate-fade-in">
                     <div>
                         <h2 class="text-lg font-extrabold text-white">Welcome Back, Practitioner</h2>
-                        <p class="text-[11px] text-gray-400 mt-1">Sign in to access your club dashboard.</p>
+                        <p class="text-[11px] text-gray-400 mt-1">Sign in to access your club portal.</p>
                     </div>
                     <div>
                         <label class="text-[10px] font-bold text-gray-400 uppercase">Username or Email</label>
@@ -1306,7 +1304,7 @@
                 </form>
 
                 <!-- REGISTER FORM -->
-                <form id="registerForm" onsubmit="handleRegisterSubmit(event)" class="glass-panel p-6 sm:p-8 rounded-2xl border border-brand-border space-y-4 animate-fade-in hidden">
+                <form id="registerForm" novalidate onsubmit="handleRegisterSubmit(event)" class="glass-panel p-6 sm:p-8 rounded-2xl border border-brand-border space-y-4 animate-fade-in hidden">
                     <div>
                         <h2 class="text-lg font-extrabold text-white">Join Exodus</h2>
                         <p class="text-[11px] text-gray-400 mt-1">Register a new Member account.</p>
@@ -1323,9 +1321,9 @@
                                 <i id="regAvatarPlaceholderIcon" class="fa-solid fa-user text-gray-600 text-lg"></i>
                             </div>
                             <label for="regAvatarFile" class="flex-1 cursor-pointer px-3.5 py-2.5 bg-brand-dark border border-brand-border rounded-xl text-xs text-gray-300 hover:border-brand-red hover:text-white transition-all flex items-center justify-center">
-                                <i class="fa-solid fa-upload mr-2"></i> <span id="regAvatarFileLabel">Attach Photo (Required)</span>
+                                <i class="fa-solid fa-upload mr-2"></i> <span id="regAvatarFileLabel">Attach Photo (Optional)</span>
                             </label>
-                            <input type="file" id="regAvatarFile" accept="image/*" required onchange="handleRegAvatarUpload(event)" class="hidden">
+                            <input type="file" id="regAvatarFile" accept="image/*" onchange="handleRegAvatarUpload(event)" class="hidden">
                         </div>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1470,10 +1468,10 @@
 
                     <!-- Active account + quick actions -->
                     <div class="flex items-center gap-2 w-full lg:w-auto lg:pl-3 lg:border-l lg:border-white/20">
-                        <img id="activeAvatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" alt="Avatar" class="w-9 h-9 rounded-full object-cover ring-2 ring-white/40 shrink-0">
+                        <img id="activeAvatar" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150" alt="Avatar" class="w-9 h-9 rounded-full object-cover ring-2 ring-white/40 shrink-0">
                         <div class="truncate lg:hidden 2xl:block 2xl:max-w-[150px]">
-                            <p id="activeName" class="text-[11px] font-bold text-white truncate">Grandmaster Rafael Santos</p>
-                            <p id="activeRoleSub" class="text-[9px] text-white/70 truncate">Head Instructor (9th Dan/Poom)</p>
+                            <p id="activeName" class="text-[11px] font-bold text-white truncate">—</p>
+                            <p id="activeRoleSub" class="text-[9px] text-white/70 truncate">—</p>
                         </div>
                         <button id="switchAccountBtn" onclick="toggleUserDropdown()" title="Switch Active Account" class="ios-icon-btn is-small ml-auto lg:ml-0">
                             <i class="fa-solid fa-arrows-rotate text-xs"></i>
@@ -1651,8 +1649,8 @@
         // GLOBAL STATE STORE
         const STATE = {
             currentRole: 'admin', // 'admin' | 'member'
-            activeUserId: 'm1', // Default Grandmaster Rafael Santos (Admin)
-            currentView: 'dashboard',
+            activeUserId: null, // Set on login. No default account — the roster starts empty.
+            currentView: 'about-club',
             searchQuery: '',
             theme: 'dark', // 'dark' | 'light'
 
@@ -1683,243 +1681,28 @@
             },
 
             // Sample Members Data
-            members: [
-                {
-                    id: 'm1',
-                    name: 'Master Rafael Santos',
-                    username: 'admin',
-                    authRole: 'admin',
-                    memberType: 'instructor',
-                    role: 'Admin / Head Instructor',
-                    belt: 'Black Belt (9th Dan/Poom)',
-                    beltCode: 'black',
-                    danLevel: 9,
-                    dob: '1978-04-12',
-                    gender: 'Male',
-                    phone: '+63 917 123 4567',
-                    email: 'rafael.santos@exodustkd.com',
-                    address: '104 Mabini Street, Quezon City, Metro Manila',
-                    emergencyContactName: 'Liza Santos',
-                    emergencyContactRelation: 'Spouse',
-                    emergencyPhone: '+63 917 987 6543',
-                    kukkiwonId: 'KKW-00918273',
-                    branch: 'Main Hombu Branch',
-                    weightClass: 'Heavyweight (87kg+)',
-                    joinDate: '2010-01-15',
-                    status: 'Active',
-                    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-                    medical: 'None',
-                    emergencyContact: 'Liza Santos (+63 917 987 6543)',
-                    bio: 'Founded EXODUS Taekwondo Club in 2010. Head Instructor overseeing curriculum, grading panels and national team selection. 9th Dan/Poom, Kukkiwon-certified.',
-                    directoryPrivacy: defaultDirectoryPrivacy(),
-                    profileComplete: true
-                },
-                {
-                    id: 'm2',
-                    name: 'Paolo Ramos',
-                    username: 'paolo.ramos',
-                    authRole: 'member',
-                    memberType: 'member',
-                    role: 'Member / Competitor',
-                    belt: 'Black Belt (1st Dan/Poom)',
-                    beltCode: 'black',
-                    danLevel: 1,
-                    dob: '1998-08-22',
-                    gender: 'Male',
-                    phone: '+63 918 234 5678',
-                    email: 'paolo.ramos@example.com',
-                    address: '742 Rizal Avenue, Makati City, Metro Manila',
-                    emergencyContactName: 'Teresa Ramos',
-                    emergencyContactRelation: 'Mother',
-                    emergencyPhone: '+63 918 876 5432',
-                    kukkiwonId: 'KKW-01827492',
-                    branch: 'North Campus Branch',
-                    weightClass: 'Middleweight (-80kg)',
-                    joinDate: '2019-03-10',
-                    status: 'Active',
-                    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
-                    medical: 'Asthma (Mild)',
-                    emergencyContact: 'Teresa Ramos (+63 918 876 5432)',
-                    bio: 'Competitive Kyorugi athlete and volunteer sparring partner for the junior class. Enjoys mentoring newer color belts before official promotion tests.',
-                    directoryPrivacy: defaultDirectoryPrivacy(),
-                    profileComplete: true
-                },
-                {
-                    id: 'm3',
-                    name: 'Isabela Reyes',
-                    username: 'isabela.reyes',
-                    authRole: 'member',
-                    memberType: 'senior',
-                    role: 'Member / Senior Practitioner',
-                    belt: 'High Red Belt',
-                    beltCode: 'red',
-                    danLevel: 0,
-                    dob: '2001-11-05',
-                    gender: 'Female',
-                    phone: '+63 919 345 6789',
-                    email: 'isabela.reyes@example.com',
-                    address: '42 Bonifacio Street, Cebu City, Cebu',
-                    emergencyContactName: 'Antonio Reyes',
-                    emergencyContactRelation: 'Father',
-                    emergencyPhone: '+63 919 765 4321',
-                    kukkiwonId: 'Poom-982141',
-                    branch: 'Main Hombu Branch',
-                    weightClass: 'Featherweight (-57kg)',
-                    joinDate: '2021-06-01',
-                    status: 'Active',
-                    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=150',
-                    medical: 'None',
-                    emergencyContact: 'Antonio Reyes (+63 919 765 4321)',
-                    bio: 'Senior Member since 2021, known for her Poomsae precision. Regularly assists at beginner orientation sessions and helps run the club\'s belt-testing check-in desk.',
-                    directoryPrivacy: { ...defaultDirectoryPrivacy(), achievements: false },
-                    profileComplete: true
-                },
-                {
-                    id: 'm4',
-                    name: 'Marco Villanueva',
-                    username: 'marco.villanueva',
-                    authRole: 'member',
-                    memberType: 'member',
-                    role: 'Member / Student',
-                    belt: 'High Blue Belt',
-                    beltCode: 'blue',
-                    danLevel: 0,
-                    dob: '2005-02-14',
-                    gender: 'Male',
-                    phone: '+63 920 456 7890',
-                    email: 'marco.villanueva@example.com',
-                    address: '88 Katipunan Avenue, Davao City, Davao del Sur',
-                    emergencyContactName: 'Daniel Villanueva',
-                    emergencyContactRelation: 'Father',
-                    emergencyPhone: '+63 920 654 3210',
-                    kukkiwonId: 'Pending Rank Record',
-                    branch: 'Westside Academy',
-                    weightClass: 'Lightweight (-68kg)',
-                    joinDate: '2022-09-12',
-                    status: 'Active',
-                    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150',
-                    medical: 'Knee History',
-                    emergencyContact: 'Daniel Villanueva (+63 920 654 3210)',
-                    bio: '',
-                    directoryPrivacy: { ...defaultDirectoryPrivacy(), tournaments: false },
-                    profileComplete: true
-                },
-                {
-                    id: 'm5',
-                    name: 'Sofia Mercado',
-                    username: 'sofia.mercado',
-                    authRole: 'member',
-                    memberType: 'member',
-                    role: 'Member / Junior Competitor',
-                    belt: 'Low Green Belt',
-                    beltCode: 'green',
-                    danLevel: 0,
-                    dob: '2008-07-19',
-                    gender: 'Female',
-                    phone: '+63 921 567 8901',
-                    email: 'sofia.mercado@example.com',
-                    address: '309 Pinewood Street, Baguio City, Benguet',
-                    emergencyContactName: 'Angela Mercado',
-                    emergencyContactRelation: 'Mother',
-                    emergencyPhone: '+63 921 543 2109',
-                    kukkiwonId: 'Pending Rank Record',
-                    branch: 'Main Hombu Branch',
-                    weightClass: 'Junior Flyweight (-46kg)',
-                    joinDate: '2023-01-20',
-                    status: 'Active',
-                    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150',
-                    medical: 'None',
-                    emergencyContact: 'Angela Mercado (+63 921 543 2109)',
-                    bio: '',
-                    directoryPrivacy: defaultDirectoryPrivacy(),
-                    profileComplete: true
-                }
-            ],
+            members: [],
 
             // Sample Belt Promotion Logs
-            promotions: [
-                { id: 'p1', memberId: 'm2', memberName: 'Paolo Ramos', fromBelt: 'High Red Belt', toBelt: 'Black Belt (1st Dan/Poom)', date: '2025-12-10', examiner: 'Master Rafael Santos', score: 94 },
-                { id: 'p2', memberId: 'm3', memberName: 'Isabela Reyes', fromBelt: 'Low Red Belt', toBelt: 'High Red Belt', date: '2026-03-15', examiner: 'Master Rafael Santos', score: 89 },
-                { id: 'p3', memberId: 'm4', memberName: 'Marco Villanueva', fromBelt: 'Low Blue Belt', toBelt: 'High Blue Belt', date: '2026-06-20', examiner: 'Master Rafael Santos', score: 86 }
-            ],
+            promotions: [],
 
             // Attendance Logs
-            attendance: [
-                { id: 'a1', memberId: 'm2', memberName: 'Paolo Ramos', date: '2026-09-14', session: 'Advanced Kyorugi Sparring', status: 'Present' },
-                { id: 'a2', memberId: 'm3', memberName: 'Isabela Reyes', date: '2026-09-14', session: 'Poomsae Form Mastery', status: 'Present' },
-                { id: 'a3', memberId: 'm4', memberName: 'Marco Villanueva', date: '2026-09-14', session: 'Poomsae Form Mastery', status: 'Late' },
-                { id: 'a4', memberId: 'm5', memberName: 'Sofia Mercado', date: '2026-09-13', session: 'Basic Kyukpa & Kick Drills', status: 'Present' },
-                { id: 'a5', memberId: 'm2', memberName: 'Paolo Ramos', date: '2026-09-12', session: 'Black Belt Conditioning', status: 'Present' }
-            ],
+            attendance: [],
 
             // Achievements & Medals
-            achievements: [
-                { id: 'ac1', memberId: 'm2', memberName: 'Paolo Ramos', title: 'Gold Medalist - Senior Heavyweight', tournament: 'National Taekwondo Championship 2026', category: 'Kyorugi', medal: 'Gold', type: 'Medal', date: '2026-05-18' },
-                { id: 'ac2', memberId: 'm3', memberName: 'Isabela Reyes', title: 'Silver Medalist - Female Individual Poomsae', tournament: 'State Martial Arts Open', category: 'Poomsae', medal: 'Silver', type: 'Medal', date: '2026-04-10' },
-                { id: 'ac3', memberId: 'm4', memberName: 'Marco Villanueva', title: 'Bronze Medalist - Junior Division', tournament: 'Metropolitan Cup 2026', category: 'Kyorugi', medal: 'Bronze', type: 'Medal', date: '2026-02-28' },
-                { id: 'ac4', memberId: 'm2', memberName: 'Paolo Ramos', title: 'Overall Grand Champion Trophy', tournament: 'National Taekwondo Championship 2026', category: 'Kyorugi', medal: 'Champion', type: 'Trophy', date: '2026-05-18' },
-                { id: 'tach_t3_m2', tournamentId: 't3', memberId: 'm2', memberName: 'Paolo Ramos', title: "Gold Medalist - Men's Kyorugi Middleweight", tournament: 'State TKD Open Championship 2026', category: 'Kyorugi', medal: 'Gold', type: 'Medal', date: '2026-05-18' },
-                { id: 'tach_t3_m3', tournamentId: 't3', memberId: 'm3', memberName: 'Isabela Reyes', title: "Silver Medalist - Women's Poomsae Individual", tournament: 'State TKD Open Championship 2026', category: 'Poomsae', medal: 'Silver', type: 'Medal', date: '2026-05-18' },
-                { id: 'tach_t3_m4', tournamentId: 't3', memberId: 'm4', memberName: 'Marco Villanueva', title: 'Bronze Medalist - Junior Kyorugi', tournament: 'State TKD Open Championship 2026', category: 'Kyorugi', medal: 'Bronze', type: 'Medal', date: '2026-05-18' }
-            ],
+            achievements: [],
 
             // Achievements module filter state (search + dropdown filters)
             achievementFilters: { search: '', medal: 'All', category: 'All', tournament: 'All', year: 'All' },
 
             // Tournaments
-            tournaments: [
-                {
-                    id: 't1',
-                    title: 'National Grand Masters Poomsae & Kyorugi Cup',
-                    date: '2026-10-15',
-                    location: 'Metropolitan Arena, NY',
-                    status: 'Registration Open',
-                    type: 'National Level',
-                    description: 'Flagship national-level tournament featuring both Poomsae and Kyorugi divisions across all belt ranks.',
-                    participants: [
-                        { memberId: 'm2', memberName: 'Paolo Ramos', division: "Men's Kyorugi Middleweight", result: '' },
-                        { memberId: 'm5', memberName: 'Sofia Mercado', division: 'Junior Poomsae Individual', result: '' }
-                    ]
-                },
-                {
-                    id: 't2',
-                    title: 'East Coast Taekwondo Championship',
-                    date: '2026-11-04',
-                    location: 'Civic Center, NJ',
-                    status: 'Upcoming',
-                    type: 'Regional',
-                    description: 'Regional qualifier bringing together clubs across the East Coast circuit.',
-                    participants: [
-                        { memberId: 'm3', memberName: 'Isabela Reyes', division: "Women's Poomsae Individual", result: '' },
-                        { memberId: 'm4', memberName: 'Marco Villanueva', division: "Men's Kyorugi Lightweight", result: '' }
-                    ]
-                },
-                {
-                    id: 't3',
-                    title: 'State TKD Open Championship 2026',
-                    date: '2026-05-18',
-                    location: 'State Sports Complex',
-                    status: 'Completed',
-                    type: 'State Level',
-                    description: 'Annual state-wide open championship for Kyorugi and Poomsae competitors of all ages.',
-                    participants: [
-                        { memberId: 'm2', memberName: 'Paolo Ramos', division: "Men's Kyorugi Middleweight", result: 'Gold' },
-                        { memberId: 'm3', memberName: 'Isabela Reyes', division: "Women's Poomsae Individual", result: 'Silver' },
-                        { memberId: 'm4', memberName: 'Marco Villanueva', division: 'Junior Kyorugi', result: 'Bronze' },
-                        { memberId: 'm5', memberName: 'Sofia Mercado', division: 'Junior Poomsae', result: '4th Place' }
-                    ]
-                }
-            ],
+            tournaments: [],
 
             // Tournaments module filter state (search + dropdown filters)
             tournamentFilters: { search: '', year: 'All', status: 'All', type: 'All' },
 
             // Certificates List
-            certificates: [
-                { id: 'CERT-2026-001', memberId: 'm2', memberName: 'Paolo Ramos', type: 'Belt Promotion', rankAwarded: 'Black Belt (1st Dan/Poom)', issueDate: '2025-12-10', masterSign: 'Grandmaster Rafael Santos', image: null },
-                { id: 'CERT-2026-002', memberId: 'm3', memberName: 'Isabela Reyes', type: 'Belt Promotion', rankAwarded: 'High Red Belt', issueDate: '2026-03-15', masterSign: 'Grandmaster Rafael Santos', image: null },
-                { id: 'CERT-2026-003', memberId: 'm4', memberName: 'Marco Villanueva', type: 'Belt Promotion', rankAwarded: 'High Blue Belt', issueDate: '2026-06-20', masterSign: 'Grandmaster Rafael Santos', image: null }
-            ],
+            certificates: [],
 
             // Certificates module filter state (search + dropdown filters)
             certificateFilters: { search: '', type: 'All', year: 'All' },
@@ -1927,13 +1710,7 @@
             // Announcements — covers tournaments, competitions, general club announcements and
             // important reminders (see ANNOUNCEMENT_CATEGORIES). "image" is an optional data URL
             // (uploaded poster/flyer); existing records simply have image: null.
-            announcements: [
-                { id: 'an1', title: 'Upcoming 3rd Quarter Belt Testing Examination', date: '2026-09-12', category: 'Reminder', target: 'All Members', priority: 'Urgent', content: 'Belt testing will take place on Saturday, Oct 3rd at 9:00 AM. Ensure all attendance requirements (minimum 24 sessions) are logged before registration.', image: null },
-                { id: 'an2', title: 'Special Black Belt Poomsae Masterclass', date: '2026-09-08', category: 'Club Announcement', target: 'Black Belts Only', priority: 'High', content: 'Grandmaster Rafael Santos will hold an intensive Koryo & Keumgang refinement session this Friday at 6:30 PM.', image: null },
-                { id: 'an3', title: 'EXODUS CLOSED FOR LABOUR DAY RECESSS', date: '2026-08-28', category: 'Reminder', target: 'All Members', priority: 'General', content: 'The club will be closed for regular classes on Monday. Private sessions resume Tuesday morning.', image: null },
-                { id: 'an4', title: 'Regional Open Championship — Registration Now Open', date: '2026-09-14', category: 'Tournament', target: 'All Members', priority: 'High', content: 'Sign-ups are open for the Regional Open Championship (Kyorugi & Poomsae, all divisions). See the front desk or your instructor to register before spots fill up.', image: null },
-                { id: 'an5', title: 'Inter-Club Poomsae Competition Results', date: '2026-09-05', category: 'Competition', target: 'All Members', priority: 'General', content: 'Congratulations to everyone who competed at last weekend\'s Inter-Club Poomsae Competition — full results are posted on the noticeboard.', image: null }
-            ],
+            announcements: [],
 
             // Announcements module filter state (search + category filter)
             announcementFilters: { search: '', category: 'All' },
@@ -1944,17 +1721,11 @@
             // via openEditClubProfileModal(); Members only ever see the read-only view. Persisted
             // to Firestore just like every other collection below (see FIRESTORE_COLLECTION_KEYS).
             clubProfile: {
-                description: 'EXODUS Taekwondo Club is a traditional Kukkiwon-affiliated dojang welcoming students of every age and skill level — from a child\'s first white belt class to an adult black belt Dan test. We combine authentic Taekwondo technique with a supportive, family-friendly training environment.',
-                history: 'Founded in 2010 by Grandmaster Rafael Santos, EXODUS began as a single small class of six students meeting in a rented barangay hall. Over the years the club grew into a multi-branch dojang known throughout the region for producing disciplined competitors and confident, respectful students — while never losing sight of the values Taekwondo was built on.',
-                mission: 'To provide a safe, encouraging dojang where every student — regardless of age or background — can build confidence, discipline and character alongside real Taekwondo skill.',
-                vision: 'To be the region\'s most trusted Taekwondo club, recognized for the character of its students as much as their achievements on the mat.',
-                slides: [
-                    { url: 'https://images.unsplash.com/photo-1555597673-b21d5c935865?auto=format&fit=crop&q=80&w=1200', caption: 'Group class at the Main Hombu Branch' },
-                    { url: 'https://images.unsplash.com/photo-1517438476312-10d79c077509?auto=format&fit=crop&q=80&w=1200', caption: 'Sparring practice during weekend training' },
-                    { url: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&q=80&w=1200', caption: 'Belt testing day' },
-                    { url: 'https://images.unsplash.com/photo-1610555356070-d0efb6505f81?auto=format&fit=crop&q=80&w=1200', caption: 'Poomsae forms practice' },
-                    { url: 'https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&q=80&w=1200', caption: 'Club members after a tournament' }
-                ]
+                description: '',
+                history: '',
+                mission: '',
+                vision: '',
+                slides: []
             }
         };
 
@@ -1963,9 +1734,16 @@
         // imports resolve asynchronously, this classic script waits for the "firebase-ready"
         // event (or the flag already being set) before touching any Firebase call.
         function ensureFirebaseReady() {
-            return new Promise(resolve => {
+            return new Promise((resolve, reject) => {
                 if (window.fb) return resolve();
-                window.addEventListener('firebase-ready', () => resolve(), { once: true });
+                const timeoutMs = 12000;
+                const timer = setTimeout(() => {
+                    reject(new Error('Firebase did not become ready in time. It may be blocked, offline, or this page was opened directly from a file instead of a real web server.'));
+                }, timeoutMs);
+                window.addEventListener('firebase-ready', () => {
+                    clearTimeout(timer);
+                    resolve();
+                }, { once: true });
             });
         }
 
@@ -2264,7 +2042,7 @@
             const fileInput = document.getElementById('regAvatarFile');
             if (preview) { preview.src = ''; preview.classList.add('hidden'); }
             if (placeholderIcon) placeholderIcon.classList.remove('hidden');
-            if (fileLabel) fileLabel.textContent = 'Attach Photo (Required)';
+            if (fileLabel) fileLabel.textContent = 'Attach Photo (Optional)';
             if (fileInput) fileInput.value = '';
         }
 
@@ -2307,8 +2085,34 @@
             const passwordConfirm = document.getElementById('regPasswordConfirm').value;
             const adminKeyRaw = document.getElementById('regAdminKey')?.value || '';
 
-            if (!regAvatarDataUrl) {
-                showAuthMessage('Please attach a profile photo to continue.', 'error');
+            // Explicit required-field checks first, with a clear prompt naming exactly what's
+            // missing — don't rely only on native browser validation, since the avatar file
+            // input is visually hidden (browsers skip constraint validation on hidden fields)
+            // and a mobile keyboard can otherwise submit a blank field without the native
+            // tooltip ever showing.
+            if (!name) {
+                showAuthMessage('Please enter your full name.', 'error');
+                document.getElementById('regName').focus();
+                return;
+            }
+            if (!email) {
+                showAuthMessage('Please enter your email address.', 'error');
+                document.getElementById('regEmail').focus();
+                return;
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                showAuthMessage('Please enter a valid email address.', 'error');
+                document.getElementById('regEmail').focus();
+                return;
+            }
+            if (!username) {
+                showAuthMessage('Please choose a username.', 'error');
+                document.getElementById('regUsername').focus();
+                return;
+            }
+            if (!password || !passwordConfirm) {
+                showAuthMessage('Please enter and confirm a password.', 'error');
+                document.getElementById(!password ? 'regPassword' : 'regPasswordConfirm').focus();
                 return;
             }
             if (password !== passwordConfirm) {
@@ -2319,20 +2123,37 @@
                 showAuthMessage('Password must be at least 6 characters long.', 'error');
                 return;
             }
-            const roleResolution = await resolveRegistrationRole(adminKeyRaw);
+            let roleResolution;
+            try {
+                roleResolution = await resolveRegistrationRole(adminKeyRaw);
+            } catch (keyErr) {
+                console.error('Could not verify Admin Key:', keyErr);
+                showAuthMessage('Could not verify the Admin Key right now. Please try again.', 'error');
+                return;
+            }
             if (!roleResolution.ok) {
                 showAuthMessage('Invalid Admin Key. Leave it blank to register as a Member.', 'error');
                 return;
             }
             const usernameLower = username.toLowerCase();
             const usernameTaken = !!USERNAME_INDEX[usernameLower] || STATE.members.some(m => m.username && m.username.toLowerCase() === usernameLower);
-            const emailTaken = STATE.members.some(m => m.email && m.email.toLowerCase() === email.toLowerCase());
+            const existingByEmail = STATE.members.find(m => m.email && m.email.toLowerCase() === email.toLowerCase());
             if (usernameTaken) {
                 showAuthMessage('That username is already taken. Please choose another.', 'error');
                 return;
             }
-            if (emailTaken) {
-                showAuthMessage('An account with that email already exists. Please log in instead.', 'error');
+            if (existingByEmail) {
+                // Give a status-specific prompt instead of one generic message, so someone who
+                // already registered knows exactly what's going on with their account.
+                const existingStatus = getAccountStatus(existingByEmail);
+                const dupMessage = existingStatus === 'pending'
+                    ? 'You already have a registration with this email that is still waiting for Admin approval. Please wait for it to be reviewed — there is no need to register again.'
+                    : existingStatus === 'rejected'
+                        ? 'A previous registration with this email was rejected. Please contact an Administrator instead of registering again.'
+                        : existingStatus === 'disabled'
+                            ? 'This email belongs to an account that has been disabled. Please contact an Administrator.'
+                            : 'An account with that email already exists. Please log in instead.';
+                showAuthMessage(dupMessage, 'error');
                 return;
             }
 
@@ -2392,7 +2213,7 @@
                 weightClass: 'Not Assigned',
                 joinDate: new Date().toISOString().split('T')[0],
                 status: 'Active',
-                avatar: regAvatarDataUrl,
+                avatar: regAvatarDataUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
                 medical: 'None',
                 emergencyContact: 'Not Provided',
                 bio: '',
@@ -2422,7 +2243,7 @@
             try { await window.fb.signOutUser(); } catch (e) { /* ignore */ }
             document.getElementById('registerForm').reset();
             switchAuthTab('login');
-            showAuthMessage(`Thanks, ${newMember.name}! Your registration has been submitted and is pending Admin approval. You'll be able to log in once it's reviewed.`, 'success');
+            showAuthMessage('Successfully created! Please wait for Admin approval.', 'success');
         }
 
         // isResumedSession is true when this login came from an existing Firebase Auth
@@ -2434,8 +2255,8 @@
             STATE.currentRole = account.authRole === 'admin' ? 'admin' : 'member';
             STATE.activeUserId = account.id;
             // About is the landing section for every role right after login (Admin and
-            // Member alike). Admin still reaches the Dashboard and every other module from
-            // the nav — this only changes what's shown first.
+            // Member alike). Admin still reaches every other module from the nav — this
+            // only changes what's shown first.
             STATE.currentView = 'about-club';
 
             if (!isResumedSession) recordLogin(account);
@@ -2942,7 +2763,6 @@
                     color: '#FBBF24',
                     adminOnly: true,
                     items: [
-                        { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-pie' },
                         { id: 'credentials', label: 'ID Passes', icon: 'fa-address-card' },
                         { id: 'achievements', label: 'Medals', icon: 'fa-trophy' },
                         { id: 'tournaments', label: 'Tournaments', icon: 'fa-fire' },
@@ -3204,7 +3024,6 @@
         // ================= PREMIUM UI SYSTEM =================
         // Accent colours are driven by the data on screen while keeping the EXODUS red identity.
         const VIEW_ACCENTS = {
-            'dashboard':            '#E60023',
             'members':              '#E60023',
             'archive':              '#94A3B8',
             'credentials':          '#FF2A4B',
@@ -3375,7 +3194,7 @@
         }
 
 
-        const ADMIN_ONLY_VIEWS = ['dashboard', 'credentials', 'archive', 'achievements', 'tournaments', 'certificates', 'announcements', 'privacy-settings', 'login-history', 'activity-log'];
+        const ADMIN_ONLY_VIEWS = ['credentials', 'archive', 'achievements', 'tournaments', 'certificates', 'announcements', 'privacy-settings', 'login-history', 'activity-log'];
 
         function renderView(viewId) {
             const main = document.getElementById('mainViewport');
@@ -3398,7 +3217,6 @@
                 case 'club-information': renderClubInformationView(main); break;
 
                 // Admin Views
-                case 'dashboard': renderAdminDashboard(main); break;
                 case 'members': renderMembersManagement(main); break;
                 case 'credentials': renderCredentialsView(main); break;
                 case 'archive': renderArchiveView(main); break;
@@ -3420,7 +3238,7 @@
                 case 'my-announcements': renderMyAnnouncementsView(main); break;
                 case 'my-privacy-settings': renderMyPrivacySettingsView(main); break;
                 
-                default: STATE.currentRole === 'admin' ? renderAdminDashboard(main) : renderMyProfileView(main); break;
+                default: STATE.currentRole === 'admin' ? renderMembersManagement(main) : renderMyProfileView(main); break;
             }
 
             schedulePersist();
@@ -3491,18 +3309,18 @@
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                         <div class="glass-panel p-5 rounded-2xl border border-brand-border lg:col-span-2 space-y-4">
                             <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-shield-heart" style="color:var(--accent)"></i> Who We Are</h3>
-                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.description || 'No club description added yet.'}</p>
+                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line"></p>
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                                 <div class="stat-tile p-3 rounded-xl text-center">
-                                    <p class="text-lg font-extrabold text-white">${activeMembers().length}</p>
+                                    <p class="text-lg font-extrabold text-white"></p>
                                     <p class="text-[10px] text-gray-400 uppercase font-bold mt-1">Active Members</p>
                                 </div>
                                 <div class="stat-tile p-3 rounded-xl text-center">
-                                    <p class="text-lg font-extrabold text-white">${years}+</p>
+                                    <p class="text-lg font-extrabold text-white"></p>
                                     <p class="text-[10px] text-gray-400 uppercase font-bold mt-1">Years Training</p>
                                 </div>
                                 <div class="stat-tile p-3 rounded-xl text-center">
-                                    <p class="text-lg font-extrabold text-white">${STATE.achievements.length}</p>
+                                    <p class="text-lg font-extrabold text-white"></p>
                                     <p class="text-[10px] text-gray-400 uppercase font-bold mt-1">Medals Earned</p>
                                 </div>
                             </div>
@@ -3510,43 +3328,28 @@
 
                         <div class="glass-panel p-5 rounded-2xl border border-brand-border space-y-3">
                             <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-user-graduate" style="color:var(--accent)"></i> Head Instructor</h3>
-                            ${head ? `
-                                <div class="flex items-center gap-3">
-                                    <img src="${head.avatar}" class="w-12 h-12 rounded-full object-cover ring-2 ring-brand-border" alt="Head Instructor">
-                                    <div class="min-w-0">
-                                        <p class="text-xs font-bold text-white truncate">${head.name}</p>
-                                        <p class="text-[10px] text-gray-400 truncate">${head.role}</p>
-                                    </div>
-                                </div>
-                                <p class="text-[11px] text-gray-400 leading-relaxed">${head.belt} &middot; ${head.branch}</p>
-                            ` : `<p class="text-[11px] text-gray-400">Instructor details unavailable.</p>`}
                         </div>
                     </div>
 
                     <div class="glass-panel p-5 rounded-2xl border border-brand-border">
                         <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-3"><i class="fa-solid fa-clock-rotate-left" style="color:var(--accent)"></i> Our History</h3>
-                        <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.history || 'No club history added yet.'}</p>
+                        <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line"></p>
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="glass-panel p-5 rounded-2xl border border-brand-border space-y-2">
                             <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-flag" style="color:var(--accent)"></i> Our Mission</h3>
-                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.mission || 'No mission statement added yet.'}</p>
+                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line"></p>
                         </div>
                         <div class="glass-panel p-5 rounded-2xl border border-brand-border space-y-2">
                             <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-eye" style="color:var(--accent)"></i> Our Vision</h3>
-                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.vision || 'No vision statement added yet.'}</p>
+                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line"></p>
                         </div>
                     </div>
 
                     <div class="glass-panel p-5 rounded-2xl border border-brand-border">
                         <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-3"><i class="fa-solid fa-star" style="color:var(--accent)"></i> Our Core Values</h3>
                         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                            ${['Courtesy', 'Integrity', 'Perseverance', 'Self-Control', 'Indomitable Spirit'].map(v => `
-                                <div class="stat-tile p-3 rounded-xl text-center">
-                                    <p class="text-[11px] font-bold text-white">${v}</p>
-                                </div>
-                            `).join('')}
                         </div>
                     </div>
                 </div>
@@ -3741,210 +3544,6 @@
             container.innerHTML = html;
         }
 
-        function renderAdminDashboard(container) {
-            const roster = activeMembers();
-            const pendingMembers = roster.filter(m => getAccountStatus(m) === 'pending');
-            const goldCount = STATE.achievements.filter(a => a.medal === 'Gold').length;
-            const silverCount = STATE.achievements.filter(a => a.medal === 'Silver').length;
-            const bronzeCount = STATE.achievements.filter(a => a.medal === 'Bronze').length;
-            const totalMedals = goldCount + silverCount + bronzeCount;
-            const blackBelts = roster.filter(m => m.beltCode === 'black').length;
-            const today = todaysCheckIns();
-            const activeSessions = STATE.loginHistory.filter(h => !h.logoutTime).length;
-            const upcomingTournaments = STATE.tournaments.filter(t => ['Registration Open', 'Upcoming', 'Ongoing'].includes(t.status)).length;
-            const recent = STATE.loginHistory.slice(0, 6);
-
-            const html = `
-                <div class="view-shell animate-rise">
-                    ${pageHero({
-                        icon: 'fa-chart-pie',
-                        eyebrow: 'Club Command Center',
-                        title: 'Dojang Intelligence Dashboard',
-                        subtitle: 'Live roster strength, belt distribution, credential output and automatic member check-ins across the EXODUS club.',
-                        chips: [
-                            heroChip('Roster', roster.length),
-                            heroChip('Black Belts', blackBelts, '#64748B'),
-                            heroChip('Check-ins today', today.length, '#10B981'),
-                            heroChip('Medals', totalMedals, '#F5A524')
-                        ].join(''),
-                        actions: `
-                            <button onclick="openAddMemberModal()" class="btn-accent px-4 py-2.5 text-xs font-bold rounded-xl flex items-center">
-                                <i class="fa-solid fa-user-plus mr-2"></i> Register Member
-                            </button>
-                            <button onclick="STATE.currentView='credentials'; renderSidebarNav(); renderView('credentials');" class="btn-ghost px-4 py-2.5 text-xs font-bold rounded-xl flex items-center">
-                                <i class="fa-solid fa-address-card mr-2"></i> Digital IDs
-                            </button>`
-                    })}
-
-                    ${pendingMembers.length ? `
-                    <div class="glass-panel rounded-2xl p-5" style="border:1px solid rgba(245,158,11,0.35)">
-                        <div class="flex items-center justify-between gap-3 mb-4">
-                            <h3 class="section-heading flex items-center">
-                                <i class="fa-solid fa-user-clock mr-2" style="color:#F59E0B"></i> Pending Registrations &middot; Account Approvals
-                            </h3>
-                            <span class="chip" style="border-color:#F59E0B55;color:#F59E0B;background:rgba(245,158,11,0.14)">${pendingMembers.length} awaiting review</span>
-                        </div>
-                        <div class="space-y-2">
-                            ${pendingMembers.map(m => {
-                                const accent = beltAccent(m.beltCode);
-                                return `
-                                    <div class="flex items-center justify-between gap-3 flex-wrap p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                                        <div class="flex items-center gap-3 min-w-0">
-                                            <img src="${m.avatar}" class="w-10 h-10 rounded-xl object-cover shrink-0" style="border:2px solid ${accent}">
-                                            <div class="min-w-0">
-                                                <p class="text-xs font-bold text-white truncate">${m.name}</p>
-                                                <p class="text-[10px] text-gray-400 truncate">${m.email || 'No email on file'} &middot; ${m.belt || 'Unranked'}</p>
-                                            </div>
-                                        </div>
-                                        <div class="flex items-center gap-2 shrink-0">
-                                            <button type="button" onclick="setMemberAccountStatus('${m.id}', 'approved')" class="px-3 py-2 text-[11px] font-bold rounded-xl flex items-center justify-center" style="background:rgba(16,185,129,0.14);color:#10B981;border:1px solid rgba(16,185,129,0.35)">
-                                                <i class="fa-solid fa-circle-check mr-1.5"></i> Approve
-                                            </button>
-                                            <button type="button" onclick="setMemberAccountStatus('${m.id}', 'rejected')" class="px-3 py-2 text-[11px] font-bold rounded-xl flex items-center justify-center" style="background:rgba(239,68,68,0.14);color:#EF4444;border:1px solid rgba(239,68,68,0.35)">
-                                                <i class="fa-solid fa-circle-xmark mr-1.5"></i> Reject
-                                            </button>
-                                        </div>
-                                    </div>`;
-                            }).join('')}
-                        </div>
-                    </div>
-                    ` : ''}
-
-                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                        ${statTile({ label: 'Active Practitioners', value: roster.length, sub: `${archivedMembers().length} archived on file`, icon: 'fa-users', color: '#E60023' })}
-                        ${statTile({ label: 'Black Belt Ranks', value: blackBelts, sub: 'Dan / Poom certified', icon: 'fa-user-ninja', color: '#64748B' })}
-                        ${statTile({ label: 'Certificates Issued', value: STATE.certificates.length, sub: 'Official club records', icon: 'fa-certificate', color: '#D4AF37' })}
-                        ${statTile({ label: 'Tournament Medals', value: totalMedals, sub: `${goldCount}G · ${silverCount}S · ${bronzeCount}B`, icon: 'fa-trophy', color: '#F5A524' })}
-                    </div>
-
-                    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 grow-fill">
-                        <div class="glass-panel rounded-2xl p-5 flex flex-col">
-                            <h3 class="section-heading flex items-center mb-1">
-                                <i class="fa-solid fa-circle-notch mr-2" style="color:var(--accent)"></i> Belt Rank Distribution
-                            </h3>
-                            <p class="text-[11px] text-gray-500 mb-3">Live breakdown of the active roster</p>
-                            <div class="relative flex-1 min-h-[230px] flex items-center justify-center">
-                                <canvas id="beltChart"></canvas>
-                            </div>
-                        </div>
-
-                        <div class="glass-panel rounded-2xl p-5 xl:col-span-2 flex flex-col">
-                            <div class="flex items-start justify-between gap-3">
-                                <div>
-                                    <h3 class="section-heading flex items-center">
-                                        <i class="fa-solid fa-fingerprint mr-2" style="color:var(--accent)"></i> Member Check-In Activity
-                                    </h3>
-                                    <p class="text-[11px] text-gray-500 mt-1">Automatic check-ins captured from member sign-ins over the last 7 days</p>
-                                </div>
-                                <span class="chip chip-accent"><i class="fa-solid fa-circle text-[6px]"></i> ${activeSessions} live</span>
-                            </div>
-                            <div class="relative flex-1 min-h-[230px] mt-3">
-                                <canvas id="attendanceChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                        <div class="glass-panel rounded-2xl p-5 xl:col-span-2">
-                            <div class="flex items-center justify-between gap-3 mb-4">
-                                <h3 class="section-heading flex items-center">
-                                    <i class="fa-solid fa-clock-rotate-left mr-2" style="color:var(--accent)"></i> Latest Check-Ins
-                                </h3>
-                                <button onclick="STATE.currentView='login-history'; renderSidebarNav(); renderView('login-history');" class="text-[11px] font-bold" style="color:var(--accent)">View full record <i class="fa-solid fa-arrow-right ml-1"></i></button>
-                            </div>
-                            <div class="space-y-2">
-                                ${recent.length ? recent.map(h => {
-                                    const accent = beltAccent(h.beltCode);
-                                    return `
-                                        <div class="flex items-center justify-between gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-white/15 transition-all">
-                                            <div class="flex items-center gap-3 min-w-0">
-                                                <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background:${accent}1f;color:${accent};border:1px solid ${accent}44">
-                                                    <i class="fa-solid fa-fingerprint text-xs"></i>
-                                                </div>
-                                                <div class="min-w-0">
-                                                    <p class="text-xs font-bold text-white truncate">${h.userName}</p>
-                                                    <p class="text-[10px] text-gray-400 truncate">${formatCheckInDate(h.loginTime)} · ${formatCheckInTime(h.loginTime)} · ${h.belt || h.role}</p>
-                                                </div>
-                                            </div>
-                                            <span class="chip shrink-0" style="border-color:${h.logoutTime ? 'rgba(255,255,255,0.15)' : '#10B98155'};color:${h.logoutTime ? '#9CA3AF' : '#10B981'};background:${h.logoutTime ? 'rgba(255,255,255,0.05)' : '#10B9811f'}">${h.status}</span>
-                                        </div>`;
-                                }).join('') : `<p class="text-xs text-gray-500 italic py-6 text-center">No check-ins recorded yet. Member sign-ins appear here automatically.</p>`}
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
-                            <button onclick="STATE.currentView='tournaments'; renderSidebarNav(); renderView('tournaments');" class="glass-panel lift accent-rail rounded-2xl p-5 text-left">
-                                <p class="eyebrow">Tournament Calendar</p>
-                                <h3 class="stat-figure mt-2" style="font-size:1.4rem">${upcomingTournaments} Active</h3>
-                                <p class="text-[10px] text-gray-500 mt-2">${STATE.tournaments.length} events on record</p>
-                            </button>
-                            <button onclick="STATE.currentView='activity-log'; renderSidebarNav(); renderView('activity-log');" class="glass-panel lift accent-rail rounded-2xl p-5 text-left">
-                                <p class="eyebrow">Admin Audit Trail</p>
-                                <h3 class="stat-figure mt-2" style="font-size:1.4rem">${STATE.activityLog.length} Entries</h3>
-                                <p class="text-[10px] text-gray-500 mt-2">Every roster and record change</p>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            container.innerHTML = html;
-
-            setTimeout(() => { initDashboardCharts(); }, 60);
-        }
-
-        function initDashboardCharts() {
-            // Belt Doughnut Chart
-            const beltCtx = document.getElementById('beltChart')?.getContext('2d');
-            if (beltCtx) {
-                new Chart(beltCtx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['White/Yellow', 'Green/Blue', 'Brown/Red', 'Black Belt (Dan/Poom)'],
-                        datasets: [{
-                            data: [12, 18, 14, 8],
-                            backgroundColor: ['#F3F4F6', '#3B82F6', '#B45309', '#111827'],
-                            borderColor: '#2A2A35',
-                            borderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { labels: { color: '#9CA3AF', font: { size: 10 } } } }
-                    }
-                });
-            }
-
-            // Attendance Line Chart
-            const attCtx = document.getElementById('attendanceChart')?.getContext('2d');
-            if (attCtx) {
-                new Chart(attCtx, {
-                    type: 'line',
-                    data: {
-                        labels: ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'],
-                        datasets: [{
-                            label: 'Attendance Rate %',
-                            data: [88, 91, 89, 93, 95, 94],
-                            borderColor: '#E60023',
-                            backgroundColor: 'rgba(230, 0, 35, 0.15)',
-                            fill: true,
-                            tension: 0.35,
-                            pointBackgroundColor: '#FF1F38'
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9CA3AF' } },
-                            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9CA3AF' } }
-                        },
-                        plugins: { legend: { display: false } }
-                    }
-                });
-            }
-        }
-
         // ================= MEMBERS SECTION =================
         // A single, simple, mobile-friendly directory used by both roles: Members get a
         // read-only card grid; Admin gets the same cards plus Add / Edit / Delete controls.
@@ -4037,11 +3636,19 @@
             const years = yearsInClub(m);
             const typeColor = memberTypeColor(m.memberType);
             const credentials = memberCredentialsLine(m, v, admin || isSelf);
+            // A member can only ever appear here with a non-'approved' status when viewed by
+            // Admin — filterMembersTable() already hides pending/rejected/disabled accounts
+            // from the Member-facing directory, and such accounts can't sign in to see it
+            // themselves anyway. So the badge and Approve/Reject controls below are safe to
+            // gate on `admin` alone; a regular member can never reach this branch.
+            const accountStatus = getAccountStatus(m);
+            const statusMeta = admin && accountStatus !== 'approved' ? accountStatusMeta(accountStatus) : null;
 
             return `
                 <div class="glass-panel lift rounded-2xl p-5 flex flex-col items-center text-center gap-2 relative overflow-hidden">
                     <div class="absolute inset-x-0 top-0 h-20 opacity-40" style="background:radial-gradient(90% 120% at 50% 0%, ${accent}40 0%, transparent 70%)"></div>
                     ${isSelf ? `<span class="absolute top-3 right-3 chip chip-accent">YOU</span>` : ''}
+                    ${statusMeta ? `<span class="absolute top-3 left-3 chip" style="border-color:${statusMeta.color}55;color:${statusMeta.color};background:${statusMeta.color}1f">${statusMeta.label}</span>` : ''}
 
                     <div class="relative z-10">
                         ${v('photo') ? `
@@ -4069,6 +3676,17 @@
                         <p class="eyebrow mb-1"><i class="fa-solid fa-certificate mr-1"></i> Credentials</p>
                         <p class="text-[10px] text-gray-400 leading-relaxed">${credentials}</p>
                     </div>
+
+                    ${admin && accountStatus === 'pending' ? `
+                        <div class="w-full grid grid-cols-2 gap-2 relative z-10">
+                            <button type="button" onclick="setMemberAccountStatus('${m.id}', 'approved')" class="px-3 py-2.5 text-[11px] font-bold rounded-xl flex items-center justify-center" style="background:rgba(16,185,129,0.14);color:#10B981;border:1px solid rgba(16,185,129,0.35)">
+                                <i class="fa-solid fa-circle-check mr-1.5"></i> Approve
+                            </button>
+                            <button type="button" onclick="setMemberAccountStatus('${m.id}', 'rejected')" class="px-3 py-2.5 text-[11px] font-bold rounded-xl flex items-center justify-center" style="background:rgba(239,68,68,0.14);color:#EF4444;border:1px solid rgba(239,68,68,0.35)">
+                                <i class="fa-solid fa-circle-xmark mr-1.5"></i> Reject
+                            </button>
+                        </div>
+                    ` : ''}
 
                     <div class="w-full flex gap-2 mt-1 relative z-10">
                         ${admin ? `
@@ -4911,7 +4529,7 @@
                                 <div class="flex justify-between items-end border-t border-white/10 pt-3">
                                     <div>
                                         <p class="eyebrow">Headmaster Signature</p>
-                                        <p class="font-serif italic text-sm text-gray-200 mt-0.5">Rafael Santos</p>
+                                        <p class="font-serif italic text-sm text-gray-200 mt-0.5">Authorized Signature</p>
                                     </div>
                                     <div class="bg-white p-1.5 rounded-xl shadow-lg">
                                         <img src="https://api.qrserver.com/v1/create-qr-code/?size=64x64&data=EXODUS-TKD-${activeUser.id}" class="w-12 h-12">
@@ -6081,7 +5699,7 @@
                             </div>
                             <div>
                                 <label class="text-xs text-gray-400 font-bold">Signed By (Examiner)</label>
-                                <input type="text" id="certMasterSign" required value="${existing ? existing.masterSign : 'Grandmaster Rafael Santos'}" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1">
+                                <input type="text" id="certMasterSign" required value="${existing ? existing.masterSign : ''}" placeholder="e.g. Grandmaster Name" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1">
                             </div>
                         </div>
                         <div>
@@ -7536,7 +7154,7 @@
         //   4. If the signed-in Firebase user matches a known member's email, resume
         //      straight into the app (without logging a fresh check-in). Otherwise show
         //      the login screen.
-        // The dashboard itself only fully initializes after a successful/resumed login
+        // The app itself only fully initializes after a successful/resumed login
         // (see completeLogin -> initApp).
         async function bootApp() {
             injectSilhouettes();
