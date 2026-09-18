@@ -7062,24 +7062,31 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
         // so we know whether to return to that profile view after saving.
         let achModalContext = null;
 
-        function achievementFormHtml(type, existing, presetMemberId) {
+        function achievementFormHtml(type, existing, presetMemberId, lockMember) {
             const isTrophy = type === 'Trophy';
             const selectedMemberId = existing ? existing.memberId : presetMemberId;
             const memberOptions = STATE.members.map(m => `<option value="${m.id}" ${selectedMemberId === m.id ? 'selected' : ''}>${m.name} (${m.belt})</option>`).join('');
             const todayStr = new Date().toISOString().split('T')[0];
+            const lockedMember = lockMember ? STATE.members.find(m => m.id === selectedMemberId) : null;
 
             return `
                 <div class="p-6 space-y-4">
                     <h3 class="text-lg font-extrabold text-white flex items-center">
                         <i class="fa-solid ${isTrophy ? 'fa-trophy' : 'fa-medal'} text-brand-red mr-2"></i> ${existing ? 'Edit Award Record' : (isTrophy ? 'Add Trophy / Champion Award' : 'Log Award / Medal')}
                     </h3>
+                    ${lockMember ? `<p class="text-[11px] text-gray-400 -mt-2"><i class="fa-solid fa-circle-info mr-1"></i> This will be added to your own record and will be visible to the admin.</p>` : ''}
                     <form onsubmit="handleAchievementFormSubmit(event, '${type}')" class="space-y-3">
                         <input type="hidden" id="achId" value="${existing ? existing.id : ''}">
                         <div>
                             <label class="text-xs text-gray-400 font-bold">Assign to Member</label>
-                            <select id="achMember" required class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1">
-                                ${memberOptions}
-                            </select>
+                            ${lockMember ? `
+                                <input type="text" disabled value="${lockedMember ? `${lockedMember.name} (${lockedMember.belt})` : 'Me'}" class="w-full bg-brand-dark/60 border border-brand-border rounded-xl p-2.5 text-xs text-gray-400 mt-1 cursor-not-allowed">
+                                <input type="hidden" id="achMember" value="${selectedMemberId}">
+                            ` : `
+                                <select id="achMember" required class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1">
+                                    ${memberOptions}
+                                </select>
+                            `}
                         </div>
                         <div>
                             <label class="text-xs text-gray-400 font-bold">${isTrophy ? 'Trophy / Award Title' : 'Medal / Achievement Title'}</label>
@@ -7122,15 +7129,21 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
         }
 
         function openAddAchievementModal(type, presetMemberId, returnToProfile) {
-            achModalContext = returnToProfile ? { returnTo: 'profile' } : null;
-            openModal(achievementFormHtml(type || 'Medal', null, presetMemberId || null));
+            // returnToProfile can be `true` (admin editing a member's profile modal),
+            // or the string 'my-achievements' (a member logging their own award from
+            // their own My Medals & Awards page) — in which case the member field is
+            // locked to themselves so they can't assign it to someone else.
+            const lockMember = returnToProfile === 'my-achievements';
+            achModalContext = returnToProfile ? { returnTo: lockMember ? 'my-achievements' : 'profile' } : null;
+            openModal(achievementFormHtml(type || 'Medal', null, presetMemberId || null, lockMember));
         }
 
         function openEditAchievementModal(id, returnToProfile) {
             const ach = STATE.achievements.find(a => a.id === id);
             if (!ach) return;
-            achModalContext = returnToProfile ? { returnTo: 'profile' } : null;
-            openModal(achievementFormHtml(ach.type || 'Medal', ach, ach.memberId));
+            const lockMember = returnToProfile === 'my-achievements';
+            achModalContext = returnToProfile ? { returnTo: lockMember ? 'my-achievements' : 'profile' } : null;
+            openModal(achievementFormHtml(ach.type || 'Medal', ach, ach.memberId, lockMember));
         }
 
         function handleAchievementFormSubmit(e, type) {
@@ -7180,6 +7193,10 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
             if (achModalContext && achModalContext.returnTo === 'profile') {
                 achModalContext = null;
                 renderMemberProfileModalContent();
+            } else if (achModalContext && achModalContext.returnTo === 'my-achievements') {
+                achModalContext = null;
+                closeModal();
+                renderView('my-achievements');
             } else {
                 closeModal();
                 renderView(STATE.currentView);
@@ -7195,7 +7212,9 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
             STATE.achievements = STATE.achievements.filter(a => a.id !== id);
             recordActivity('Deleted Achievement', member, `Removed ${(ach.type || 'Medal').toLowerCase()} "${ach.title}" (${ach.tournament}).`);
 
-            if (returnToProfile) {
+            if (returnToProfile === 'my-achievements') {
+                renderView('my-achievements');
+            } else if (returnToProfile) {
                 renderMemberProfileModalContent();
             } else {
                 renderView(STATE.currentView);
@@ -9061,8 +9080,16 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                             <div class="min-w-0">
                                 <p class="eyebrow">My Record</p>
                                 <h2 class="hero-title mt-1">My Medals &amp; Awards</h2>
-                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">Your personal competition honours across every Empire Taekwondo Gym-registered tournament.</p>
+                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">Your personal competition honours across every Empire Taekwondo Gym-registered tournament. Log your own medals and trophies below — your admin can see everything you add.</p>
                             </div>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <button onclick="openAddAchievementModal('Medal', '${user.id}', 'my-achievements')" class="px-4 py-2 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center">
+                                <i class="fa-solid fa-medal mr-2"></i> Add Medal
+                            </button>
+                            <button onclick="openAddAchievementModal('Trophy', '${user.id}', 'my-achievements')" class="px-4 py-2 bg-brand-border hover:bg-gray-700 text-gray-200 text-xs font-bold rounded-xl shadow-md transition-all flex items-center">
+                                <i class="fa-solid fa-trophy mr-2"></i> Add Trophy
+                            </button>
                         </div>
                     </div>
 
@@ -9077,12 +9104,16 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                         ${myAch.length ? myAch.map(a => `
                             <div class="glass-panel p-4 rounded-2xl border border-brand-border flex items-center space-x-4">
                                 <i class="fa-solid ${medalIconClass(a)} text-3xl shrink-0"></i>
-                                <div class="min-w-0">
+                                <div class="min-w-0 flex-1">
                                     <h4 class="font-bold text-white text-sm truncate">${a.title}</h4>
                                     <p class="text-xs text-gray-400 truncate">${a.tournament} · ${a.category} · ${a.date}</p>
                                 </div>
+                                <div class="flex items-center gap-1 shrink-0">
+                                    <button type="button" onclick="openEditAchievementModal('${a.id}', 'my-achievements')" class="p-1.5 text-gray-400 hover:text-brand-red" title="Edit"><i class="fa-solid fa-pen text-xs"></i></button>
+                                    <button type="button" onclick="deleteAchievement('${a.id}', 'my-achievements')" class="p-1.5 text-gray-400 hover:text-red-500" title="Delete"><i class="fa-solid fa-trash text-xs"></i></button>
+                                </div>
                             </div>
-                        `).join('') : '<p class="text-xs text-gray-500 italic col-span-2">No medals or awards recorded yet.</p>'}
+                        `).join('') : '<p class="text-xs text-gray-500 italic col-span-2">No medals or awards recorded yet. Use the buttons above to add your first one — your admin will see it right away.</p>'}
                     </div>
                 </div>
             `;
