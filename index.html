@@ -3562,6 +3562,24 @@
                 
                 default: STATE.currentRole === 'admin' ? renderMembersManagement(main) : renderMyProfileView(main); break;
             }
+            } catch (err) {
+                // Defensive: a rendering error in any single view should never leave the
+                // page blank with no way forward. Log it for debugging and show a friendly,
+                // recoverable message instead of an empty screen.
+                console.error('Error rendering view "' + viewId + '":', err);
+                main.innerHTML = `
+                    <div class="view-shell animate-rise">
+                        <div class="glass-panel p-8 rounded-2xl border border-brand-border text-center space-y-3">
+                            <i class="fa-solid fa-triangle-exclamation text-3xl text-brand-red"></i>
+                            <h3 class="text-white font-bold">Something went wrong loading this page.</h3>
+                            <p class="text-xs text-gray-400">Please try again, or go back to your profile.</p>
+                            <button onclick="STATE.currentView='${STATE.currentRole === 'admin' ? 'members' : 'my-profile'}'; renderSidebarNav(); renderView(STATE.currentView);" class="px-4 py-2 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl">
+                                Go to ${STATE.currentRole === 'admin' ? 'Members' : 'My Profile'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
 
             schedulePersist();
         }
