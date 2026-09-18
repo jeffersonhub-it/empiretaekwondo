@@ -2438,7 +2438,17 @@
                         </div>
                     </div>
 
+                    <!-- Step indicator -->
+                    <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
+                        <span id="cpStepDot1" class="w-6 h-6 rounded-full flex items-center justify-center bg-brand-red text-white">1</span>
+                        <span class="text-gray-400">Personal Information</span>
+                        <span class="flex-1 h-px bg-brand-border mx-1"></span>
+                        <span id="cpStepDot2" class="w-6 h-6 rounded-full flex items-center justify-center bg-brand-border text-gray-400">2</span>
+                        <span class="text-gray-400">Tournament History</span>
+                    </div>
+
                     <form id="completeProfileForm" onsubmit="handleCompleteProfileSubmit(event, '${member.id}')" class="space-y-4">
+                        <div id="cpPage1" class="space-y-4">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <!-- Personal Details -->
                             <div class="space-y-3 bg-brand-dark/40 p-4 rounded-xl border border-brand-border/60">
@@ -2542,6 +2552,14 @@
                             </div>
                         </div>
 
+                        <div class="flex justify-end pt-2">
+                            <button type="button" onclick="cpGoToStep(2)" class="px-6 py-2.5 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center">
+                                Next: Tournament History <i class="fa-solid fa-arrow-right ml-2"></i>
+                            </button>
+                        </div>
+                        </div>
+
+                        <div id="cpPage2" class="space-y-4" style="display:none">
                         <!-- Tournament History (self-reported, unlimited entries) -->
                         <div class="bg-brand-dark/40 p-4 rounded-xl border border-brand-border/60 space-y-3">
                             <div class="flex items-center justify-between">
@@ -2558,16 +2576,46 @@
                             </div>
                         </div>
 
-                        <div class="flex justify-end pt-2">
+                        <div class="flex justify-between pt-2">
+                            <button type="button" onclick="cpGoToStep(1)" class="px-6 py-2.5 bg-brand-dark border border-brand-border hover:border-brand-red text-white text-xs font-bold rounded-xl transition-all flex items-center">
+                                <i class="fa-solid fa-arrow-left mr-2"></i> Back
+                            </button>
                             <button type="submit" class="px-6 py-2.5 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center">
                                 <i class="fa-solid fa-circle-check mr-2"></i> Save & Continue
                             </button>
+                        </div>
                         </div>
                     </form>
                 </div>
             `;
             cpTournamentSeq = (member.tournamentHistory && member.tournamentHistory.length) ? member.tournamentHistory.length : 0;
             openModal(modalHtml);
+        }
+
+        // Switches between the two Complete Profile pages (1 = Personal Information,
+        // 2 = Tournament History). Values already typed on either page are kept — the
+        // pages are just shown/hidden, never re-rendered. Advancing to page 2 runs the
+        // browser's native validation against page 1's required fields first (page 2's
+        // required fields are display:none at that point, so they're skipped, exactly
+        // as HTML5 constraint validation ignores hidden fields).
+        function cpGoToStep(step) {
+            const form = document.getElementById('completeProfileForm');
+            if (step === 2 && form && !form.reportValidity()) return;
+
+            const page1 = document.getElementById('cpPage1');
+            const page2 = document.getElementById('cpPage2');
+            const dot1 = document.getElementById('cpStepDot1');
+            const dot2 = document.getElementById('cpStepDot2');
+            if (!page1 || !page2) return;
+
+            page1.style.display = step === 1 ? '' : 'none';
+            page2.style.display = step === 2 ? '' : 'none';
+            if (dot1 && dot2) {
+                dot1.className = 'w-6 h-6 rounded-full flex items-center justify-center ' + (step === 1 ? 'bg-brand-red text-white' : 'bg-brand-border text-gray-400');
+                dot2.className = 'w-6 h-6 rounded-full flex items-center justify-center ' + (step === 2 ? 'bg-brand-red text-white' : 'bg-brand-border text-gray-400');
+            }
+            const modalBody = form.closest('.overflow-y-auto') || form;
+            modalBody.scrollTop = 0;
         }
 
         // Row counter for the Tournament History section of the Complete Profile modal —
