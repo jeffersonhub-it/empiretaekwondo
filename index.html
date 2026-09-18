@@ -3108,10 +3108,7 @@
                     items: [
                         { id: 'my-profile', label: 'My Profile / My Info', icon: 'fa-id-badge' },
                         { id: 'my-credentials', label: 'My ID Card', icon: 'fa-address-card' },
-                        { id: 'my-achievements', label: 'My Medals', icon: 'fa-medal' },
-                        { id: 'my-certificates', label: 'My Certificates', icon: 'fa-certificate' },
-                        { id: 'my-tournaments', label: 'My Tournaments', icon: 'fa-trophy' },
-                        { id: 'my-checkins', label: 'My Check-Ins', icon: 'fa-fingerprint' },
+                        { id: 'my-tournament-history', label: 'My Tournament History', icon: 'fa-trophy' },
                         { id: 'my-privacy-settings', label: 'My Privacy', icon: 'fa-lock' }
                     ]
                 });
@@ -3355,15 +3352,12 @@
             'credentials':          '#FF2A4B',
             'my-credentials':       '#FF2A4B',
             'achievements':         '#F5A524',
-            'my-achievements':      '#F5A524',
             'tournaments':          '#FF6B2C',
-            'my-tournaments':       '#FF6B2C',
+            'my-tournament-history':'#FF6B2C',
             'certificates':         '#D4AF37',
-            'my-certificates':      '#D4AF37',
             'announcements':        '#3B82F6',
             'my-announcements':     '#3B82F6',
             'login-history':        '#10B981',
-            'my-checkins':          '#10B981',
             'activity-log':         '#8B5CF6',
             'privacy-settings':     '#64748B',
             'my-privacy-settings':  '#64748B',
@@ -3560,6 +3554,7 @@
                 case 'my-checkins': renderMyCheckInsView(main); break;
                 case 'my-achievements': renderMyAchievementsView(main); break;
                 case 'my-tournaments': renderMyTournamentsView(main); break;
+                case 'my-tournament-history': renderMyTournamentHistoryView(main); break;
                 case 'my-certificates': renderMyCertificatesView(main); break;
                 case 'my-announcements': renderMyAnnouncementsView(main); break;
                 case 'my-privacy-settings': renderMyPrivacySettingsView(main); break;
