@@ -3531,6 +3531,7 @@
             applyViewAccent(viewId);
             main.scrollTop = 0;
 
+            try {
             switch(viewId) {
                 // Shared / public info views (visible to Admin and Members)
                 case 'about-club': renderAboutClubView(main); break;
@@ -7317,6 +7318,161 @@
                 </div>
             `;
             container.insertAdjacentHTML('afterbegin', historyHtml);
+        }
+
+        // ================= MY TOURNAMENT HISTORY (dedicated sidebar view) =================
+        // Shows the same self-reported tournamentHistory collected during Complete Your
+        // Member Profile, and lets the member keep adding more from here — using the exact
+        // same fields/flow as "Add Tournament" during profile creation — so it always stays
+        // in sync with what's saved on their member record in Firestore.
+        function renderMyTournamentHistoryView(container) {
+            const user = STATE.members.find(m => m.id === STATE.activeUserId) || STATE.members[0];
+            const history = (user && Array.isArray(user.tournamentHistory)) ? user.tournamentHistory : [];
+
+            const medalStyle = (medal) => medal === 'Gold' ? 'background:rgba(234,179,8,0.15);color:#EAB308;border:1px solid rgba(234,179,8,0.35);'
+                : medal === 'Silver' ? 'background:rgba(148,163,184,0.15);color:#94A3B8;border:1px solid rgba(148,163,184,0.35);'
+                : medal === 'Bronze' ? 'background:rgba(217,119,6,0.15);color:#D97706;border:1px solid rgba(217,119,6,0.35);'
+                : 'background:rgba(107,114,128,0.15);color:#9CA3AF;border:1px solid rgba(107,114,128,0.35);';
+
+            const html = `
+                <div class="view-shell animate-rise">
+                    <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                        <div class="hero-figure"></div>
+                        <div class="flex items-start gap-4 min-w-0">
+                            <div class="hero-ico shrink-0"><i class="fa-solid fa-trophy"></i></div>
+                            <div class="min-w-0">
+                                <p class="eyebrow">My Record</p>
+                                <h2 class="hero-title mt-1">My Tournament History</h2>
+                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">Every tournament you've added to your profile — add as many as you like, the same way you did when completing your profile.</p>
+                            </div>
+                        </div>
+                        <button onclick="openAddMyTournamentModal()" class="px-4 py-2 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center">
+                            <i class="fa-solid fa-plus mr-2"></i> Add Tournament
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${history.length ? history.map(t => `
+                            <div class="glass-panel p-5 rounded-2xl border border-brand-border flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <h3 class="text-base font-extrabold text-white leading-snug truncate">${t.name}</h3>
+                                    <p class="text-xs text-gray-400 mt-1">${t.type} · ${t.classification}</p>
+                                    <p class="text-xs text-gray-400"><i class="fa-solid fa-weight-hanging mr-1 text-brand-red"></i> ${t.category}</p>
+                                    <p class="text-xs text-gray-400"><i class="fa-solid fa-location-dot mr-1 text-brand-red"></i> ${t.venue}</p>
+                                    <p class="text-xs text-gray-400"><i class="fa-solid fa-calendar mr-1 text-brand-red"></i> ${t.date}</p>
+                                </div>
+                                <div class="flex flex-col items-end gap-2 shrink-0">
+                                    <span class="text-[10px] font-bold px-2 py-1 rounded-lg" style="${medalStyle(t.medal)}">${t.medal}</span>
+                                    <button onclick="deleteMyTournamentHistoryEntry('${t.id}')" title="Remove" class="w-7 h-7 flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg transition-all"><i class="fa-solid fa-trash"></i></button>
+                                </div>
+                            </div>
+                        `).join('') : '<p class="text-xs text-gray-500 italic col-span-2 text-center py-10">You haven\'t added any tournaments yet. Click "Add Tournament" to add your first one.</p>'}
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        // Same fields as the Tournament History step of Complete Your Member Profile.
+        function openAddMyTournamentModal() {
+            const inputClass = "w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-red";
+            const typeOptions = ['International', 'National', 'Local'];
+            const classificationOptions = ['Novice', 'Advance 1', 'Advance 2'];
+            const medalOptions = ['Gold', 'Silver', 'Bronze', 'None'];
+            const html = `
+                <div class="p-6 space-y-4">
+                    <h3 class="text-lg font-extrabold text-white flex items-center">
+                        <i class="fa-solid fa-trophy text-brand-red mr-2"></i> Add Tournament
+                    </h3>
+                    <form id="addMyTournamentForm" onsubmit="handleAddMyTournamentSubmit(event)" class="space-y-3">
+                        <div>
+                            <label class="text-[10px] font-bold text-gray-400 uppercase">Tournament Name *</label>
+                            <input type="text" id="mtName" required class="${inputClass}">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-400 uppercase">Type *</label>
+                                <select id="mtType" required class="${inputClass}">
+                                    ${typeOptions.map(o => `<option value="${o}">${o}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-400 uppercase">Classification *</label>
+                                <select id="mtClassification" required class="${inputClass}">
+                                    ${classificationOptions.map(o => `<option value="${o}">${o}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-400 uppercase">Category (Weight) *</label>
+                                <input type="text" id="mtCategory" required placeholder="e.g. -68kg Lightweight" class="${inputClass}">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-400 uppercase">Medal *</label>
+                                <select id="mtMedal" required class="${inputClass}">
+                                    ${medalOptions.map(o => `<option value="${o}">${o}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-400 uppercase">Date *</label>
+                                <input type="date" id="mtDate" required class="${inputClass}">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-400 uppercase">Venue *</label>
+                                <input type="text" id="mtVenue" required class="${inputClass}">
+                            </div>
+                        </div>
+                        <div class="flex justify-end gap-2 pt-2">
+                            <button type="button" onclick="closeModal()" class="px-4 py-2 bg-brand-dark border border-brand-border text-white text-xs font-bold rounded-xl">Cancel</button>
+                            <button type="submit" class="px-4 py-2 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl">Save Tournament</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            openModal(html);
+        }
+
+        async function handleAddMyTournamentSubmit(e) {
+            e.preventDefault();
+            const user = STATE.members.find(m => m.id === STATE.activeUserId) || STATE.members[0];
+            if (!user) return;
+            if (!Array.isArray(user.tournamentHistory)) user.tournamentHistory = [];
+
+            const name = document.getElementById('mtName').value.trim();
+            const entry = {
+                id: `${user.id}_t${Date.now()}`,
+                name,
+                type: document.getElementById('mtType').value,
+                category: document.getElementById('mtCategory').value.trim(),
+                classification: document.getElementById('mtClassification').value,
+                date: document.getElementById('mtDate').value,
+                venue: document.getElementById('mtVenue').value.trim(),
+                medal: document.getElementById('mtMedal').value
+            };
+            user.tournamentHistory.push(entry);
+
+            recordActivity('Added Tournament History', user, `${user.name} added "${name}" to their tournament history.`, user);
+
+            // Save straight to Firestore via the app's existing members persistence path.
+            await persistCollection('members');
+
+            closeModal();
+            renderView(STATE.currentView);
+            showToastNotification(`"${name}" added to your tournament history.`);
+        }
+
+        function deleteMyTournamentHistoryEntry(entryId) {
+            const user = STATE.members.find(m => m.id === STATE.activeUserId) || STATE.members[0];
+            if (!user || !Array.isArray(user.tournamentHistory)) return;
+            if (!confirm('Remove this tournament from your history?')) return;
+            user.tournamentHistory = user.tournamentHistory.filter(t => t.id !== entryId);
+            recordActivity('Removed Tournament History', user, `${user.name} removed a tournament from their history.`, user);
+            persistCollection('members');
+            renderView(STATE.currentView);
+            showToastNotification('Tournament removed from your history.');
         }
 
         function renderMyCertificatesView(container) {
