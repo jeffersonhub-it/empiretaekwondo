@@ -1675,6 +1675,7 @@
             { key: 'joinYear', label: 'Join Year', icon: 'fa-calendar' },
             { key: 'achievements', label: 'Achievements', icon: 'fa-medal' },
             { key: 'tournaments', label: 'Tournaments', icon: 'fa-trophy' },
+            { key: 'tournamentHistory', label: 'Tournament History', icon: 'fa-trophy' },
             { key: 'certificates', label: 'Certificates', icon: 'fa-certificate' },
             { key: 'bio', label: 'Bio / Club Contribution', icon: 'fa-quote-left' }
         ];
@@ -4226,9 +4227,10 @@
                         </div>
                     </div>
 
-                    ${(member.tournamentHistory && member.tournamentHistory.length) ? `
+                    ${v('tournamentHistory') ? `
                     <div class="glass-panel p-4 rounded-2xl border border-brand-border/60 space-y-2">
                         <h4 class="text-xs font-bold text-brand-red uppercase tracking-wider flex items-center"><i class="fa-solid fa-trophy mr-1.5"></i> Tournament History (Self-Reported)</h4>
+                        ${(member.tournamentHistory && member.tournamentHistory.length) ? `
                         <div class="space-y-2">
                             ${member.tournamentHistory.map(t => `
                                 <div class="flex items-center justify-between text-xs text-gray-300 bg-brand-dark/40 rounded-lg px-3 py-2 border border-brand-border/40">
@@ -4240,8 +4242,14 @@
                                 </div>
                             `).join('')}
                         </div>
+                        ` : '<p class="text-[11px] text-gray-500 italic">No tournament history added yet.</p>'}
                     </div>
-                    ` : ''}
+                    ` : `
+                    <div class="glass-panel p-4 rounded-2xl border border-brand-border/60 space-y-2">
+                        <h4 class="text-xs font-bold text-brand-red uppercase tracking-wider flex items-center"><i class="fa-solid fa-trophy mr-1.5"></i> Tournament History (Self-Reported)</h4>
+                        <p class="text-[11px] text-gray-500 italic">Kept private by this member.</p>
+                    </div>
+                    `}
                 </div>
             `;
             openModal(modalHtml);
