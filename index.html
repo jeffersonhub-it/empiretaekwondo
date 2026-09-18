@@ -3290,11 +3290,18 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
 
         async function persistCollection(key) {
             try {
-                await ensureFirebaseReady();
-                await window.fb.saveCollectionDoc(key, collectionKeyToPayload(key));
+                await persistCollectionStrict(key);
             } catch (err) {
                 console.error('Firestore save failed for', key, err);
             }
+        }
+
+        // Same persistence path, but intentionally lets the caller see a Firestore error.
+        // Registration uses this so a blocked Security Rule can never be reported as a
+        // successful registration when only Firebase Auth was created.
+        async function persistCollectionStrict(key) {
+            await ensureFirebaseReady();
+            await window.fb.saveCollectionDoc(key, collectionKeyToPayload(key));
         }
 
         async function persistAllCollections() {
@@ -3886,8 +3893,31 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
             STATE.members.push(newMember);
             resetRegAvatarUpload();
             recordActivity('Registered New Account', newMember, `${newMember.name} self-registered as a new ${roleResolution.authRole === 'admin' ? 'Admin' : 'Member'}.`, newMember);
-            persistCollection('members');
-            saveUsernameIndex();
+
+            // IMPORTANT: do not swallow a Firestore permission error here. Firebase Auth has
+            // already created the login account, but the registration is not complete until the
+            // pending member record is actually persisted.
+            try {
+                await persistCollectionStrict('members');
+            } catch (memberSaveErr) {
+                console.error('Could not save the pending member record:', memberSaveErr);
+                STATE.members = STATE.members.filter(m => m !== newMember);
+                const code = memberSaveErr && memberSaveErr.code ? memberSaveErr.code : '';
+                const message = code === 'permission-denied'
+                    ? 'Account authentication was created, but Firestore denied the pending member record. Update the Firestore Rules for self-registration, then register again with a different email or remove the unfinished Auth account.'
+                    : 'Your login account was created, but the member record could not be saved. Please try again after checking your Firebase connection.';
+                showAuthMessage(message, 'error');
+                try { await window.fb.signOutUser(); } catch (e) { /* ignore */ }
+                if (submitBtn) submitBtn.disabled = false;
+                return;
+            }
+
+            // The username index is only a login convenience. If its shared public document is
+            // temporarily blocked, the member record is still safely stored and the user can
+            // log in with their email.
+            try { await saveUsernameIndex(); } catch (indexErr) {
+                console.error('Could not save username index after registration:', indexErr);
+            }
             // Record the authoritative role for this account in its own small, separate
             // document (see window.fb.saveRoleDoc). Security Rules trust this doc — not the
             // authRole embedded in the shared "members" array — to decide Admin access, and
