@@ -3301,7 +3301,28 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
         // successful registration when only Firebase Auth was created.
         async function persistCollectionStrict(key) {
             await ensureFirebaseReady();
-            await window.fb.saveCollectionDoc(key, collectionKeyToPayload(key));
+            try {
+                await window.fb.saveCollectionDoc(key, collectionKeyToPayload(key));
+            } catch (err) {
+                // Preserve the original Firebase error code/message so registration can
+                // distinguish permission-denied from network/authentication failures.
+                console.error(`Firestore strict save failed for ${key}:`, err);
+                throw err;
+            }
+        }
+
+        function formatFirestoreError(err, fallback) {
+            const code = String(err?.code || '').toLowerCase();
+            if (code.includes('permission-denied')) {
+                return 'Firestore permission denied. Publish the self-registration Rules supplied with this app, then try registering again with a new email.';
+            }
+            if (code.includes('failed-precondition')) {
+                return 'Firestore is not ready for this database operation. Check that Firestore Database is enabled in Firebase Console.';
+            }
+            if (code.includes('unavailable') || code.includes('deadline-exceeded')) {
+                return 'Firestore is temporarily unavailable. Check your internet connection and try again.';
+            }
+            return fallback || `Firestore error${err?.message ? `: ${err.message}` : '.'}`;
         }
 
         async function persistAllCollections() {
@@ -3902,10 +3923,10 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
             } catch (memberSaveErr) {
                 console.error('Could not save the pending member record:', memberSaveErr);
                 STATE.members = STATE.members.filter(m => m !== newMember);
-                const code = memberSaveErr && memberSaveErr.code ? memberSaveErr.code : '';
-                const message = code === 'permission-denied'
-                    ? 'Account authentication was created, but Firestore denied the pending member record. Update the Firestore Rules for self-registration, then register again with a different email or remove the unfinished Auth account.'
-                    : 'Your login account was created, but the member record could not be saved. Please try again after checking your Firebase connection.';
+                const message = formatFirestoreError(
+                    memberSaveErr,
+                    'Your login account was created, but the pending member record could not be saved. Please check Firebase and try again.'
+                );
                 showAuthMessage(message, 'error');
                 try { await window.fb.signOutUser(); } catch (e) { /* ignore */ }
                 if (submitBtn) submitBtn.disabled = false;
