@@ -8932,22 +8932,43 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                         </button>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        ${history.length ? history.map(t => `
-                            <div class="glass-panel p-5 rounded-2xl border border-brand-border flex items-start justify-between gap-3">
-                                <div class="min-w-0">
-                                    <h3 class="text-base font-extrabold text-white leading-snug truncate">${t.name}</h3>
-                                    <p class="text-xs text-gray-400 mt-1">${t.type} · ${t.classification}</p>
-                                    <p class="text-xs text-gray-400"><i class="fa-solid fa-weight-hanging mr-1 text-brand-red"></i> ${t.category}</p>
-                                    <p class="text-xs text-gray-400"><i class="fa-solid fa-location-dot mr-1 text-brand-red"></i> ${t.venue}</p>
-                                    <p class="text-xs text-gray-400"><i class="fa-solid fa-calendar mr-1 text-brand-red"></i> ${t.date}</p>
-                                </div>
-                                <div class="flex flex-col items-end gap-2 shrink-0">
-                                    <span class="text-[10px] font-bold px-2 py-1 rounded-lg" style="${medalStyle(t.medal)}">${t.medal}</span>
-                                    <button onclick="deleteMyTournamentHistoryEntry('${t.id}')" title="Remove" class="w-7 h-7 flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg transition-all"><i class="fa-solid fa-trash"></i></button>
-                                </div>
-                            </div>
-                        `).join('') : '<p class="text-xs text-gray-500 italic col-span-2 text-center py-10">You haven\'t added any tournaments yet. Click "Add Tournament" to add your first one.</p>'}
+                    <div class="glass-panel rounded-2xl border border-brand-border overflow-hidden">
+                        ${history.length ? `
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="border-b border-brand-border bg-brand-dark/40">
+                                        <th class="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tournament Name</th>
+                                        <th class="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Type</th>
+                                        <th class="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Classification</th>
+                                        <th class="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Category (Weight)</th>
+                                        <th class="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Venue</th>
+                                        <th class="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Date</th>
+                                        <th class="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Medal</th>
+                                        <th class="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${history.map(t => `
+                                        <tr class="border-b border-brand-border/60 last:border-b-0 hover:bg-white/5 transition-colors">
+                                            <td class="px-4 py-3 text-xs font-bold text-white whitespace-nowrap">${t.name}</td>
+                                            <td class="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">${t.type}</td>
+                                            <td class="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">${t.classification}</td>
+                                            <td class="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">${t.category}</td>
+                                            <td class="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">${t.venue}</td>
+                                            <td class="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">${t.date}</td>
+                                            <td class="px-4 py-3 whitespace-nowrap">
+                                                <span class="text-[10px] font-bold px-2 py-1 rounded-lg" style="${medalStyle(t.medal)}">${t.medal}</span>
+                                            </td>
+                                            <td class="px-4 py-3 text-right whitespace-nowrap">
+                                                <button onclick="deleteMyTournamentHistoryEntry('${t.id}')" title="Remove" class="w-7 h-7 inline-flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg transition-all"><i class="fa-solid fa-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        ` : '<p class="text-xs text-gray-500 italic text-center py-10">You haven\'t added any tournaments yet. Click "Add Tournament" to add your first one.</p>'}
                     </div>
                 </div>
             `;
