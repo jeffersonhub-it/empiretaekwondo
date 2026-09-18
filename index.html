@@ -3241,7 +3241,7 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
             // ============ ABOUT / CLUB PROFILE (editable by Admin, view-only for Members) ============
             // Everything shown on the About landing page: description, history, mission/vision,
             // and the 5-slide club photo slideshow. Admin edits this from the About page itself
-            // via openEditClubProfileModal(); Members only ever see the read-only view. Persisted
+            // via the per-section "Edit" buttons on the About/Club Information pages. Members only
             // to Firestore just like every other collection below (see FIRESTORE_COLLECTION_KEYS).
             clubProfile: {
                 description: '',
@@ -3255,7 +3255,19 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                     email: 'empiretaekwondoph@gmail.com',
                     instagram: 'https://www.instagram.com/empiretaekwondoph',
                     facebook: 'https://www.facebook.com/empiretaekwondo/'
-                }
+                },
+                branch: {
+                    name: 'Main Hombu Branch',
+                    address: '2nd Floor, GIG Mall, 296 Diego Cera Ave, Las Piñas',
+                    phone: '0915 903 2334',
+                    email: 'empiretaekwondoph@gmail.com'
+                },
+                classSchedule: [
+                    { label: 'Little Tigers (5-7 yrs)', time: 'Mon &middot; Wed &middot; Fri &mdash; 4:30 PM' },
+                    { label: 'Youth Program (8-12 yrs)', time: 'Mon &middot; Wed &middot; Fri &mdash; 5:30 PM' },
+                    { label: 'Teens &amp; Adults', time: 'Tue &middot; Thu &mdash; 6:30 PM' },
+                    { label: 'Black Belt Club', time: 'Sat &mdash; 9:00 AM' }
+                ]
             }
         };
 
@@ -3384,6 +3396,29 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
         // Loads every collection from Firestore into STATE. If a document doesn't exist yet
         // (brand-new Firebase project), it seeds Firestore with whatever demo data currently
         // sits in STATE so the app still has something to show on first run.
+        // Fills in clubProfile.branch / classSchedule when loading an older saved profile
+        // (from before these fields existed) so the Club Information page never breaks.
+        function ensureClubProfileDefaults() {
+            const cp = STATE.clubProfile || (STATE.clubProfile = {});
+            if (!cp.branch) {
+                cp.branch = {
+                    name: 'Main Hombu Branch',
+                    address: (cp.contact && cp.contact.address) || '2nd Floor, GIG Mall, 296 Diego Cera Ave, Las Piñas',
+                    phone: (cp.contact && cp.contact.phone) || '0915 903 2334',
+                    email: (cp.contact && cp.contact.email) || 'empiretaekwondoph@gmail.com'
+                };
+            }
+            if (!Array.isArray(cp.classSchedule) || !cp.classSchedule.length) {
+                cp.classSchedule = [
+                    { label: 'Little Tigers (5-7 yrs)', time: 'Mon &middot; Wed &middot; Fri &mdash; 4:30 PM' },
+                    { label: 'Youth Program (8-12 yrs)', time: 'Mon &middot; Wed &middot; Fri &mdash; 5:30 PM' },
+                    { label: 'Teens &amp; Adults', time: 'Tue &middot; Thu &mdash; 6:30 PM' },
+                    { label: 'Black Belt Club', time: 'Sat &mdash; 9:00 AM' }
+                ];
+            }
+            return cp;
+        }
+
         async function loadClubDataFromFirestore() {
             await ensureFirebaseReady();
             for (const key of [...FIRESTORE_COLLECTION_KEYS, 'privacySettings', 'clubProfile']) {
@@ -3395,6 +3430,7 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                             STATE.privacySettings = data.settings || STATE.privacySettings;
                         } else if (key === 'clubProfile') {
                             STATE.clubProfile = data.profile || STATE.clubProfile;
+                            ensureClubProfileDefaults();
                         } else {
                             STATE[key] = Array.isArray(data.items) ? data.items : STATE[key];
                         }
@@ -5141,7 +5177,7 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
         // ================= ABOUT / CLUB PROFILE (landing page after login) =================
         // Description, history, mission/vision and the 5-slide photo slideshow all read from
         // STATE.clubProfile (see STATE definition + FIRESTORE persistence above). Admin can
-        // edit every field here via openEditClubProfileModal(); Members get the same layout
+        // edit each section here via its own "Edit" button; Members get the same layout
         // with no edit controls — this view never lets a Member mutate STATE.clubProfile.
         let aboutSlideIndex = 0;
         let aboutSlideTimer = null;
@@ -5155,6 +5191,11 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
             const admin = isAdmin();
             if (aboutSlideIndex >= slides.length) aboutSlideIndex = 0;
 
+            // Small reusable "Edit" pill shown next to a section heading, admin-only.
+            const sectionEditBtn = (fnName) => admin
+                ? `<button onclick="${fnName}()" class="ml-auto shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>`
+                : '';
+
             const html = `
                 <div class="view-shell animate-rise">
                     <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -5167,11 +5208,6 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                                 <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">A traditional Kukkiwon dojang for every age — from a child's first white belt class to a black belt Dan test — built on discipline, respect and self-belief.</p>
                             </div>
                         </div>
-                        ${admin ? `
-                            <button onclick="openEditClubProfileModal()" class="btn-accent px-4 py-2.5 text-xs font-bold rounded-xl shrink-0 flex items-center">
-                                <i class="fa-solid fa-pen-to-square mr-2"></i> Edit About Page
-                            </button>
-                        ` : ''}
                     </div>
 
                     <!-- Club Photo Slideshow (5 slides) -->
@@ -5195,27 +5231,28 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                             ` : `
                                 <div class="w-full h-full flex flex-col items-center justify-center text-center px-6 space-y-2">
                                     <i class="fa-solid fa-images text-2xl text-gray-600"></i>
-                                    <p class="text-xs text-gray-500">${admin ? 'No slideshow photos yet — add up to 5 from "Edit About Page".' : 'Club photos coming soon.'}</p>
+                                    <p class="text-xs text-gray-500">${admin ? 'No slideshow photos yet — click "Edit" below to add up to 5.' : 'Club photos coming soon.'}</p>
                                 </div>
                             `}
+                            ${admin ? `<button onclick="openEditClubSlidesModal()" class="absolute top-3 right-3 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-black/50 hover:bg-black/70 text-white border border-white/20 flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit Photos</button>` : ''}
                         </div>
                     </div>
 
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                         <div class="glass-panel p-5 rounded-2xl border border-brand-border lg:col-span-2 space-y-4">
-                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-shield-heart" style="color:var(--accent)"></i> Who We Are</h3>
-                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line"></p>
+                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-shield-heart" style="color:var(--accent)"></i> Who We Are ${sectionEditBtn('openEditClubDescriptionModal')}</h3>
+                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.description || (admin ? 'No description yet — click "Edit" to add one.' : '')}</p>
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                                 <div class="stat-tile p-3 rounded-xl text-center">
-                                    <p class="text-lg font-extrabold text-white"></p>
+                                    <p class="text-lg font-extrabold text-white">${activeMembers().length}</p>
                                     <p class="text-[10px] text-gray-400 uppercase font-bold mt-1">Active Members</p>
                                 </div>
                                 <div class="stat-tile p-3 rounded-xl text-center">
-                                    <p class="text-lg font-extrabold text-white"></p>
+                                    <p class="text-lg font-extrabold text-white">${years}</p>
                                     <p class="text-[10px] text-gray-400 uppercase font-bold mt-1">Years Training</p>
                                 </div>
                                 <div class="stat-tile p-3 rounded-xl text-center">
-                                    <p class="text-lg font-extrabold text-white"></p>
+                                    <p class="text-lg font-extrabold text-white">${STATE.achievements.length}</p>
                                     <p class="text-[10px] text-gray-400 uppercase font-bold mt-1">Medals Earned</p>
                                 </div>
                             </div>
@@ -5223,33 +5260,36 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
 
                         <div class="glass-panel p-5 rounded-2xl border border-brand-border space-y-3">
                             <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-user-graduate" style="color:var(--accent)"></i> Head Instructor</h3>
+                            ${head ? `
+                                <div class="flex items-center gap-3">
+                                    <img src="${head.avatar}" class="w-12 h-12 rounded-xl object-cover border border-brand-border">
+                                    <div class="min-w-0">
+                                        <p class="text-xs font-bold text-white truncate">${head.name}</p>
+                                        <p class="text-[10px] text-gray-400">${head.role || head.belt}</p>
+                                    </div>
+                                </div>
+                            ` : `<p class="text-xs text-gray-500">No head instructor on file.</p>`}
                         </div>
                     </div>
 
                     <div class="glass-panel p-5 rounded-2xl border border-brand-border">
-                        <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-3"><i class="fa-solid fa-clock-rotate-left" style="color:var(--accent)"></i> Our History</h3>
-                        <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line"></p>
+                        <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-3"><i class="fa-solid fa-clock-rotate-left" style="color:var(--accent)"></i> Our History ${sectionEditBtn('openEditClubHistoryModal')}</h3>
+                        <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.history || (admin ? 'No history written yet — click "Edit" to add it.' : '')}</p>
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="glass-panel p-5 rounded-2xl border border-brand-border space-y-2">
-                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-flag" style="color:var(--accent)"></i> Our Mission</h3>
-                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line"></p>
+                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-flag" style="color:var(--accent)"></i> Our Mission ${sectionEditBtn('openEditClubMissionModal')}</h3>
+                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.mission || (admin ? 'No mission statement yet — click "Edit" to add one.' : '')}</p>
                         </div>
                         <div class="glass-panel p-5 rounded-2xl border border-brand-border space-y-2">
-                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-eye" style="color:var(--accent)"></i> Our Vision</h3>
-                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line"></p>
+                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-eye" style="color:var(--accent)"></i> Our Vision ${sectionEditBtn('openEditClubVisionModal')}</h3>
+                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.vision || (admin ? 'No vision statement yet — click "Edit" to add one.' : '')}</p>
                         </div>
                     </div>
 
                     <div class="glass-panel p-5 rounded-2xl border border-brand-border">
-                        <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-3"><i class="fa-solid fa-star" style="color:var(--accent)"></i> Our Core Values</h3>
-                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                        </div>
-                    </div>
-
-                    <div class="glass-panel p-5 rounded-2xl border border-brand-border">
-                        <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-4"><i class="fa-solid fa-location-dot" style="color:var(--accent)"></i> Visit / Get In Touch</h3>
+                        <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-4"><i class="fa-solid fa-location-dot" style="color:var(--accent)"></i> Visit / Get In Touch ${sectionEditBtn('openEditClubContactModal')}</h3>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             ${contact.address ? `
                                 <a href="https://maps.google.com/?q=${encodeURIComponent(contact.address)}" target="_blank" rel="noopener" class="flex items-start gap-3 p-3 rounded-xl border border-brand-border hover:border-brand-red transition-all">
@@ -5276,6 +5316,7 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                                     <i class="fa-brands fa-instagram text-sm mt-0.5" style="color:var(--accent)"></i>
                                     <div class="min-w-0"><p class="text-[10px] text-gray-500 uppercase font-bold">Instagram</p><p class="text-xs text-gray-300 mt-0.5 truncate">@empiretaekwondoph</p></div>
                                 </a>` : ''}
+                            ${(!contact.address && !contact.phone && !contact.email && !contact.facebook && !contact.instagram && admin) ? `<p class="text-xs text-gray-500 italic sm:col-span-2">No contact info yet — click "Edit" above to add it.</p>` : ''}
                         </div>
                     </div>
                 </div>
@@ -5324,70 +5365,30 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
             }, 5000);
         }
 
-        // ---------- Admin: edit description / history / mission / vision / slideshow ----------
-        function openEditClubProfileModal() {
-            if (!isAdmin()) return;
-            const cp = STATE.clubProfile || {};
-            const existing = (Array.isArray(cp.slides) ? cp.slides : []).slice(0, 5);
-            const slides = existing.concat(Array(5 - existing.length).fill(null)).map(s => s || { url: '', caption: '' });
+        // ---------- Admin: edit About page, one section at a time ----------
+        // Shared helper: after any clubProfile section is saved, persist + re-render.
+        function finishClubProfileSave(message, view) {
+            persistCollection('clubProfile');
+            closeModal();
+            aboutSlideIndex = 0;
+            STATE.currentView = view || 'about-club';
+            renderView(STATE.currentView);
+            showToastNotification(message);
+        }
 
+        function simpleTextareaModal(opts) {
+            // opts: { title, icon, fieldId, label, placeholder, value, activityMsg, onSave }
             const html = `
-                <div class="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+                <div class="p-6 space-y-4">
                     <h3 class="text-lg font-extrabold text-white flex items-center">
-                        <i class="fa-solid fa-pen-to-square text-brand-red mr-2"></i> Edit About Page
+                        <i class="fa-solid ${opts.icon} text-brand-red mr-2"></i> ${opts.title}
                     </h3>
-                    <p class="text-[11px] text-gray-400 -mt-2">Members see this page as read-only — changes here are visible to everyone as soon as you save.</p>
-                    <form onsubmit="handleSaveClubProfile(event)" class="space-y-4">
+                    <p class="text-[11px] text-gray-400 -mt-2">Members see this as read-only — changes are visible to everyone as soon as you save.</p>
+                    <form onsubmit="${opts.submitFn}(event)" class="space-y-3">
                         <div>
-                            <label class="text-xs text-gray-400 font-bold">Club Description</label>
-                            <textarea id="cpDescription" rows="3" placeholder="Who is Empire Taekwondo Gym, in a nutshell?" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">${cp.description || ''}</textarea>
+                            <label class="text-xs text-gray-400 font-bold">${opts.label}</label>
+                            <textarea id="${opts.fieldId}" rows="5" placeholder="${opts.placeholder}" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">${opts.value || ''}</textarea>
                         </div>
-                        <div>
-                            <label class="text-xs text-gray-400 font-bold">Club History</label>
-                            <textarea id="cpHistory" rows="3" placeholder="Where and when the club started, how it grew..." class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">${cp.history || ''}</textarea>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                                <label class="text-xs text-gray-400 font-bold">Mission</label>
-                                <textarea id="cpMission" rows="3" placeholder="What the club exists to do..." class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">${cp.mission || ''}</textarea>
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-400 font-bold">Vision</label>
-                                <textarea id="cpVision" rows="3" placeholder="What the club aspires to become..." class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">${cp.vision || ''}</textarea>
-                            </div>
-                        </div>
-
-                        <div class="pt-2 border-t border-brand-border/60">
-                            <p class="text-xs font-bold text-white mb-2 flex items-center gap-1.5"><i class="fa-solid fa-location-dot" style="color:var(--accent)"></i> Contact Info</p>
-                            <div class="space-y-2.5">
-                                <input type="text" id="cpAddress" value="${(cp.contact && cp.contact.address) || ''}" placeholder="Branch address" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-brand-red">
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                    <input type="text" id="cpPhone" value="${(cp.contact && cp.contact.phone) || ''}" placeholder="Phone / mobile number" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-brand-red">
-                                    <input type="email" id="cpEmail" value="${(cp.contact && cp.contact.email) || ''}" placeholder="Email address" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-brand-red">
-                                </div>
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                    <input type="text" id="cpFacebook" value="${(cp.contact && cp.contact.facebook) || ''}" placeholder="Facebook page URL" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-brand-red">
-                                    <input type="text" id="cpInstagram" value="${(cp.contact && cp.contact.instagram) || ''}" placeholder="Instagram URL" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-brand-red">
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="pt-2 border-t border-brand-border/60">
-                            <p class="text-xs font-bold text-white mb-2 flex items-center gap-1.5"><i class="fa-solid fa-images" style="color:var(--accent)"></i> Slideshow Photos (up to 5)</p>
-                            <div class="space-y-2.5">
-                                ${slides.map((s, i) => `
-                                    <div class="grid grid-cols-4 gap-2 items-start bg-brand-dark/40 border border-brand-border rounded-xl p-2.5">
-                                        <img src="${s.url || ''}" onerror="this.style.visibility='hidden'" class="col-span-1 w-full h-14 object-cover rounded-lg border border-brand-border bg-black/30">
-                                        <div class="col-span-3 space-y-1.5">
-                                            <input type="text" id="cpSlideUrl${i}" value="${s.url || ''}" placeholder="Slide ${i + 1} image URL" class="w-full bg-brand-dark border border-brand-border rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-brand-red">
-                                            <input type="text" id="cpSlideCaption${i}" value="${s.caption || ''}" placeholder="Caption (optional)" class="w-full bg-brand-dark border border-brand-border rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-brand-red">
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                            <p class="text-[10px] text-gray-500 mt-2">Leave a slide's image URL blank to skip it — the slideshow only shows slides with a photo.</p>
-                        </div>
-
                         <div class="flex gap-3 pt-2">
                             <button type="button" onclick="closeModal()" class="flex-1 btn-ghost py-2.5 text-xs font-bold rounded-xl">Cancel</button>
                             <button type="submit" class="flex-1 btn-accent py-2.5 text-xs font-bold rounded-xl">Save Changes</button>
@@ -5398,14 +5399,111 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
             openModal(html);
         }
 
-        function handleSaveClubProfile(event) {
+        function openEditClubDescriptionModal() {
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || {};
+            simpleTextareaModal({
+                title: 'Edit "Who We Are"', icon: 'fa-pen-to-square', fieldId: 'cpDescription',
+                label: 'Club Description', placeholder: 'Who is Empire Taekwondo Gym, in a nutshell?',
+                value: cp.description, submitFn: 'handleSaveClubDescription'
+            });
+        }
+        function handleSaveClubDescription(event) {
             event.preventDefault();
             if (!isAdmin()) return;
-            const cp = STATE.clubProfile || (STATE.clubProfile = {});
+            const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             cp.description = (document.getElementById('cpDescription').value || '').trim();
+            recordActivity('Updated Club Profile', null, 'Admin updated the About page "Who We Are" description.');
+            finishClubProfileSave('Description updated');
+        }
+
+        function openEditClubHistoryModal() {
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || {};
+            simpleTextareaModal({
+                title: 'Edit Club History', icon: 'fa-clock-rotate-left', fieldId: 'cpHistory',
+                label: 'Club History', placeholder: 'Where and when the club started, how it grew...',
+                value: cp.history, submitFn: 'handleSaveClubHistory'
+            });
+        }
+        function handleSaveClubHistory(event) {
+            event.preventDefault();
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             cp.history = (document.getElementById('cpHistory').value || '').trim();
+            recordActivity('Updated Club Profile', null, 'Admin updated the About page club history.');
+            finishClubProfileSave('History updated');
+        }
+
+        function openEditClubMissionModal() {
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || {};
+            simpleTextareaModal({
+                title: 'Edit Our Mission', icon: 'fa-flag', fieldId: 'cpMission',
+                label: 'Mission', placeholder: 'What the club exists to do...',
+                value: cp.mission, submitFn: 'handleSaveClubMission'
+            });
+        }
+        function handleSaveClubMission(event) {
+            event.preventDefault();
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             cp.mission = (document.getElementById('cpMission').value || '').trim();
+            recordActivity('Updated Club Profile', null, 'Admin updated the About page mission statement.');
+            finishClubProfileSave('Mission updated');
+        }
+
+        function openEditClubVisionModal() {
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || {};
+            simpleTextareaModal({
+                title: 'Edit Our Vision', icon: 'fa-eye', fieldId: 'cpVision',
+                label: 'Vision', placeholder: 'What the club aspires to become...',
+                value: cp.vision, submitFn: 'handleSaveClubVision'
+            });
+        }
+        function handleSaveClubVision(event) {
+            event.preventDefault();
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             cp.vision = (document.getElementById('cpVision').value || '').trim();
+            recordActivity('Updated Club Profile', null, 'Admin updated the About page vision statement.');
+            finishClubProfileSave('Vision updated');
+        }
+
+        function openEditClubContactModal() {
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || {};
+            const contact = cp.contact || {};
+            const html = `
+                <div class="p-6 space-y-4">
+                    <h3 class="text-lg font-extrabold text-white flex items-center">
+                        <i class="fa-solid fa-location-dot text-brand-red mr-2"></i> Edit Visit / Get In Touch
+                    </h3>
+                    <p class="text-[11px] text-gray-400 -mt-2">Members see this as read-only — changes are visible to everyone as soon as you save.</p>
+                    <form onsubmit="handleSaveClubContact(event)" class="space-y-2.5">
+                        <input type="text" id="cpAddress" value="${contact.address || ''}" placeholder="Branch address" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-brand-red">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <input type="text" id="cpPhone" value="${contact.phone || ''}" placeholder="Phone / mobile number" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-brand-red">
+                            <input type="email" id="cpEmail" value="${contact.email || ''}" placeholder="Email address" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-brand-red">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <input type="text" id="cpFacebook" value="${contact.facebook || ''}" placeholder="Facebook page URL" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-brand-red">
+                            <input type="text" id="cpInstagram" value="${contact.instagram || ''}" placeholder="Instagram URL" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-brand-red">
+                        </div>
+                        <div class="flex gap-3 pt-2">
+                            <button type="button" onclick="closeModal()" class="flex-1 btn-ghost py-2.5 text-xs font-bold rounded-xl">Cancel</button>
+                            <button type="submit" class="flex-1 btn-accent py-2.5 text-xs font-bold rounded-xl">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            openModal(html);
+        }
+        function handleSaveClubContact(event) {
+            event.preventDefault();
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             cp.contact = {
                 address: (document.getElementById('cpAddress').value || '').trim(),
                 phone: (document.getElementById('cpPhone').value || '').trim(),
@@ -5413,7 +5511,44 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                 facebook: (document.getElementById('cpFacebook').value || '').trim(),
                 instagram: (document.getElementById('cpInstagram').value || '').trim()
             };
+            recordActivity('Updated Club Profile', null, 'Admin updated the About page contact info.');
+            finishClubProfileSave('Contact info updated');
+        }
 
+        function openEditClubSlidesModal() {
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || {};
+            const existing = (Array.isArray(cp.slides) ? cp.slides : []).slice(0, 5);
+            const slides = existing.concat(Array(5 - existing.length).fill(null)).map(s => s || { url: '', caption: '' });
+            const html = `
+                <div class="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+                    <h3 class="text-lg font-extrabold text-white flex items-center">
+                        <i class="fa-solid fa-images text-brand-red mr-2"></i> Edit Slideshow Photos (up to 5)
+                    </h3>
+                    <p class="text-[11px] text-gray-400 -mt-2">Leave a slide's image URL blank to skip it — the slideshow only shows slides with a photo.</p>
+                    <form onsubmit="handleSaveClubSlides(event)" class="space-y-2.5">
+                        ${slides.map((s, i) => `
+                            <div class="grid grid-cols-4 gap-2 items-start bg-brand-dark/40 border border-brand-border rounded-xl p-2.5">
+                                <img src="${s.url || ''}" onerror="this.style.visibility='hidden'" class="col-span-1 w-full h-14 object-cover rounded-lg border border-brand-border bg-black/30">
+                                <div class="col-span-3 space-y-1.5">
+                                    <input type="text" id="cpSlideUrl${i}" value="${s.url || ''}" placeholder="Slide ${i + 1} image URL" class="w-full bg-brand-dark border border-brand-border rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-brand-red">
+                                    <input type="text" id="cpSlideCaption${i}" value="${s.caption || ''}" placeholder="Caption (optional)" class="w-full bg-brand-dark border border-brand-border rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-brand-red">
+                                </div>
+                            </div>
+                        `).join('')}
+                        <div class="flex gap-3 pt-2">
+                            <button type="button" onclick="closeModal()" class="flex-1 btn-ghost py-2.5 text-xs font-bold rounded-xl">Cancel</button>
+                            <button type="submit" class="flex-1 btn-accent py-2.5 text-xs font-bold rounded-xl">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            openModal(html);
+        }
+        function handleSaveClubSlides(event) {
+            event.preventDefault();
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             const slides = [];
             for (let i = 0; i < 5; i++) {
                 const urlEl = document.getElementById('cpSlideUrl' + i);
@@ -5423,23 +5558,129 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                 if (url) slides.push({ url, caption });
             }
             cp.slides = slides;
+            recordActivity('Updated Club Profile', null, 'Admin updated the About page slideshow photos.');
+            finishClubProfileSave('Slideshow updated');
+        }
 
-            recordActivity('Updated Club Profile', null, 'Admin updated the About page description, history, mission/vision and/or slideshow photos.');
-            closeModal();
-            aboutSlideIndex = 0;
-            STATE.currentView = 'about-club';
-            renderView('about-club');
-            showToastNotification('About page updated');
+        // ---------- Admin: edit Club Information page, one section at a time ----------
+        function openEditClubBranchModal() {
+            if (!isAdmin()) return;
+            const branch = (STATE.clubProfile && STATE.clubProfile.branch) || {};
+            const html = `
+                <div class="p-6 space-y-4">
+                    <h3 class="text-lg font-extrabold text-white flex items-center">
+                        <i class="fa-solid fa-building text-brand-red mr-2"></i> Edit Dojang Branch
+                    </h3>
+                    <form onsubmit="handleSaveClubBranch(event)" class="space-y-2.5">
+                        <div>
+                            <label class="text-xs text-gray-400 font-bold">Branch Name</label>
+                            <input type="text" id="cbName" value="${branch.name || ''}" placeholder="e.g. Main Hombu Branch" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 font-bold">Address</label>
+                            <input type="text" id="cbAddress" value="${branch.address || ''}" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div>
+                                <label class="text-xs text-gray-400 font-bold">Front Desk Phone</label>
+                                <input type="text" id="cbPhone" value="${branch.phone || ''}" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 font-bold">Email</label>
+                                <input type="email" id="cbEmail" value="${branch.email || ''}" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
+                            </div>
+                        </div>
+                        <div class="flex gap-3 pt-2">
+                            <button type="button" onclick="closeModal()" class="flex-1 btn-ghost py-2.5 text-xs font-bold rounded-xl">Cancel</button>
+                            <button type="submit" class="flex-1 btn-accent py-2.5 text-xs font-bold rounded-xl">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            openModal(html);
+        }
+        function handleSaveClubBranch(event) {
+            event.preventDefault();
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
+            cp.branch = {
+                name: (document.getElementById('cbName').value || '').trim(),
+                address: (document.getElementById('cbAddress').value || '').trim(),
+                phone: (document.getElementById('cbPhone').value || '').trim(),
+                email: (document.getElementById('cbEmail').value || '').trim()
+            };
+            recordActivity('Updated Club Profile', null, 'Admin updated the Club Information branch details.');
+            finishClubProfileSave('Branch details updated', 'club-information');
+        }
+
+        function openEditClassScheduleModal() {
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || {};
+            const existing = Array.isArray(cp.classSchedule) ? cp.classSchedule : [];
+            const rows = existing.length ? existing : [{ label: '', time: '' }];
+            const html = `
+                <div class="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+                    <h3 class="text-lg font-extrabold text-white flex items-center">
+                        <i class="fa-solid fa-clock text-brand-red mr-2"></i> Edit Class Schedule
+                    </h3>
+                    <form onsubmit="handleSaveClassSchedule(event)" class="space-y-3">
+                        <div id="csRows" class="space-y-2.5">
+                            ${rows.map((r, i) => classScheduleRowHtml(i, r)).join('')}
+                        </div>
+                        <button type="button" onclick="addClassScheduleRow()" class="w-full py-2 text-[11px] font-bold rounded-xl bg-brand-red/15 text-brand-red border border-brand-red/40 hover:bg-brand-red/25">
+                            <i class="fa-solid fa-plus mr-1"></i> Add Class
+                        </button>
+                        <div class="flex gap-3 pt-2">
+                            <button type="button" onclick="closeModal()" class="flex-1 btn-ghost py-2.5 text-xs font-bold rounded-xl">Cancel</button>
+                            <button type="submit" class="flex-1 btn-accent py-2.5 text-xs font-bold rounded-xl">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            openModal(html);
+        }
+        let csRowSeq = 0;
+        function classScheduleRowHtml(rowId, r) {
+            r = r || {};
+            csRowSeq = Math.max(csRowSeq, rowId + 1);
+            return `
+                <div id="csRow_${rowId}" class="grid grid-cols-[1fr_1fr_auto] gap-2 items-center bg-brand-dark/40 border border-brand-border rounded-xl p-2.5">
+                    <input type="text" id="csLabel_${rowId}" value="${r.label || ''}" placeholder="Class name (e.g. Little Tigers)" class="w-full bg-brand-dark border border-brand-border rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-brand-red">
+                    <input type="text" id="csTime_${rowId}" value="${r.time || ''}" placeholder="Schedule (e.g. Mon, Wed, Fri - 4:30 PM)" class="w-full bg-brand-dark border border-brand-border rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-brand-red">
+                    <button type="button" onclick="document.getElementById('csRow_${rowId}').remove()" class="w-8 h-8 flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            `;
+        }
+        function addClassScheduleRow() {
+            const wrap = document.getElementById('csRows');
+            if (!wrap) return;
+            wrap.insertAdjacentHTML('beforeend', classScheduleRowHtml(csRowSeq, {}));
+        }
+        function handleSaveClassSchedule(event) {
+            event.preventDefault();
+            if (!isAdmin()) return;
+            const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
+            const schedule = [];
+            document.querySelectorAll('#csRows [id^="csRow_"]').forEach(rowEl => {
+                const rowId = rowEl.id.replace('csRow_', '');
+                const label = (document.getElementById(`csLabel_${rowId}`)?.value || '').trim();
+                const time = (document.getElementById(`csTime_${rowId}`)?.value || '').trim();
+                if (label) schedule.push({ label, time });
+            });
+            cp.classSchedule = schedule;
+            recordActivity('Updated Club Profile', null, 'Admin updated the Club Information class schedule.');
+            finishClubProfileSave('Class schedule updated', 'club-information');
         }
 
         function renderClubInformationView(container) {
             const head = STATE.members.find(m => m.id === 'm1');
-            const schedule = [
-                ['Little Tigers (5-7 yrs)', 'Mon &middot; Wed &middot; Fri &mdash; 4:30 PM'],
-                ['Youth Program (8-12 yrs)', 'Mon &middot; Wed &middot; Fri &mdash; 5:30 PM'],
-                ['Teens &amp; Adults', 'Tue &middot; Thu &mdash; 6:30 PM'],
-                ['Black Belt Club', 'Sat &mdash; 9:00 AM']
-            ];
+            const cp = ensureClubProfileDefaults();
+            const branch = cp.branch || {};
+            const schedule = Array.isArray(cp.classSchedule) ? cp.classSchedule : [];
+            const admin = isAdmin();
+            const sectionEditBtn = (fnName) => admin
+                ? `<button onclick="${fnName}()" class="ml-auto shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>`
+                : '';
             const html = `
                 <div class="view-shell animate-rise">
                     <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -5456,34 +5697,34 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="glass-panel p-5 rounded-2xl border border-brand-border space-y-4">
-                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-building" style="color:var(--accent)"></i> Dojang Branch</h3>
-                            ${head ? `
+                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-building" style="color:var(--accent)"></i> Dojang Branch ${sectionEditBtn('openEditClubBranchModal')}</h3>
+                            ${(branch.address || branch.phone || branch.email) ? `
                                 <div class="space-y-3">
                                     <div class="flex items-start gap-3">
                                         <i class="fa-solid fa-location-dot text-xs mt-1" style="color:var(--accent)"></i>
-                                        <div><p class="text-xs text-white font-semibold">${head.branch}</p><p class="text-[11px] text-gray-400">${head.address}</p></div>
+                                        <div><p class="text-xs text-white font-semibold">${branch.name || 'Main Branch'}</p><p class="text-[11px] text-gray-400">${branch.address || ''}</p></div>
                                     </div>
                                     <div class="flex items-start gap-3">
                                         <i class="fa-solid fa-phone text-xs mt-1" style="color:var(--accent)"></i>
-                                        <div><p class="text-xs text-white font-semibold">Front Desk</p><p class="text-[11px] text-gray-400">${head.phone}</p></div>
+                                        <div><p class="text-xs text-white font-semibold">Front Desk</p><p class="text-[11px] text-gray-400">${branch.phone || '—'}</p></div>
                                     </div>
                                     <div class="flex items-start gap-3">
                                         <i class="fa-solid fa-envelope text-xs mt-1" style="color:var(--accent)"></i>
-                                        <div><p class="text-xs text-white font-semibold">Email</p><p class="text-[11px] text-gray-400">${head.email}</p></div>
+                                        <div><p class="text-xs text-white font-semibold">Email</p><p class="text-[11px] text-gray-400">${branch.email || '—'}</p></div>
                                     </div>
                                 </div>
-                            ` : `<p class="text-[11px] text-gray-400">Branch details unavailable.</p>`}
+                            ` : `<p class="text-[11px] text-gray-400">${admin ? 'No branch details yet — click "Edit" to add them.' : 'Branch details unavailable.'}</p>`}
                         </div>
 
                         <div class="glass-panel p-5 rounded-2xl border border-brand-border space-y-4">
-                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-clock" style="color:var(--accent)"></i> Class Schedule</h3>
+                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-clock" style="color:var(--accent)"></i> Class Schedule ${sectionEditBtn('openEditClassScheduleModal')}</h3>
                             <div class="space-y-2">
-                                ${schedule.map(([cls, time]) => `
+                                ${schedule.length ? schedule.map(s => `
                                     <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-brand-dark/40 border border-brand-border">
-                                        <span class="text-[11px] font-semibold text-white">${cls}</span>
-                                        <span class="text-[10px] text-gray-400 font-mono">${time}</span>
+                                        <span class="text-[11px] font-semibold text-white">${s.label}</span>
+                                        <span class="text-[10px] text-gray-400 font-mono">${s.time || ''}</span>
                                     </div>
-                                `).join('')}
+                                `).join('') : `<p class="text-[11px] text-gray-400">${admin ? 'No classes listed yet — click "Edit" to add them.' : 'Schedule unavailable.'}</p>`}
                             </div>
                         </div>
                     </div>
