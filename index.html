@@ -4648,8 +4648,6 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                         { id: 'credentials', label: 'ID Passes', icon: 'fa-address-card' },
                         { id: 'achievements', label: 'Medals', icon: 'fa-trophy' },
                         { id: 'tournaments', label: 'Tournaments', icon: 'fa-fire' },
-                        { id: 'certificates', label: 'Certificates', icon: 'fa-certificate' },
-                        { id: 'login-history', label: 'Check-Ins', icon: 'fa-fingerprint', badge: STATE.loginHistory.length },
                         { id: 'archive', label: 'Archive', icon: 'fa-box-archive', badge: archivedMembers().length },
                         { id: 'privacy-settings', label: 'Privacy', icon: 'fa-lock' },
                         { id: 'activity-log', label: 'Activity Log', icon: 'fa-file-pen', badge: STATE.activityLog.length }
@@ -8575,11 +8573,9 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                             </button>`
                     })}
 
-                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    <div class="grid grid-cols-2 gap-3 sm:gap-4">
                         ${statTile({ label: 'Medals & Awards', value: myAch.length, sub: 'Competition record', icon: 'fa-medal', color: '#F5A524' })}
-                        ${statTile({ label: 'Certificates', value: myCerts.length, sub: 'Official documents', icon: 'fa-certificate', color: '#D4AF37' })}
                         ${statTile({ label: 'Tournaments', value: myTours.length, sub: 'Registered events', icon: 'fa-fire', color: '#FF6B2C' })}
-                        ${statTile({ label: 'Check-Ins', value: myCheckIns.length, sub: 'Recorded sessions', icon: 'fa-fingerprint', color: '#10B981' })}
                     </div>
 
                     <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 grow-fill">
@@ -8619,12 +8615,9 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                                 <p class="text-[10px] text-gray-500 mt-2">Rank ${BELT_RANKS.findIndex(b => b.name === user.belt) + 1} of ${BELT_RANKS.length} on the Empire Taekwondo Gym progression roadmap</p>
                             </div>
 
-                            <div class="w-full grid grid-cols-2 gap-2 mt-auto pt-5 relative z-10">
-                                <button onclick="STATE.currentView='my-certificates'; renderSidebarNav(); renderView('my-certificates');" class="btn-ghost px-3 py-2.5 text-[11px] font-bold rounded-xl">
-                                    <i class="fa-solid fa-certificate mr-1.5"></i> Certificates
-                                </button>
-                                <button onclick="STATE.currentView='my-checkins'; renderSidebarNav(); renderView('my-checkins');" class="btn-ghost px-3 py-2.5 text-[11px] font-bold rounded-xl">
-                                    <i class="fa-solid fa-fingerprint mr-1.5"></i> Check-Ins
+                            <div class="w-full grid grid-cols-1 gap-2 mt-auto pt-5 relative z-10">
+                                <button onclick="STATE.currentView='my-tournament-history'; renderSidebarNav(); renderView('my-tournament-history');" class="btn-ghost px-3 py-2.5 text-[11px] font-bold rounded-xl">
+                                    <i class="fa-solid fa-trophy mr-1.5"></i> Tournament History
                                 </button>
                             </div>
                         </div>
