@@ -43,7 +43,7 @@
         import {
             getAuth, onAuthStateChanged, signInWithEmailAndPassword,
             createUserWithEmailAndPassword, signOut, updatePassword,
-            sendPasswordResetEmail
+            sendPasswordResetEmail, setPersistence, browserLocalPersistence
         } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
         import {
             getFirestore, doc, getDoc, setDoc, onSnapshot
@@ -62,6 +62,14 @@
         const fbApp = initializeApp(firebaseConfig);
         const fbAuth = getAuth(fbApp);
         const fbDb = getFirestore(fbApp);
+
+        // Explicit LOCAL persistence: keeps the signed-in session (Admin or Member) in the
+        // browser's own storage across page refreshes and re-opening the tab/browser, so
+        // nobody — Admin included — gets logged out just from refreshing the page. bootApp's
+        // watchAuth check below then resumes straight back into the app on the next load.
+        setPersistence(fbAuth, browserLocalPersistence).catch(err => {
+            console.error('Could not set Firebase Auth persistence to LOCAL:', err);
+        });
 
         // Thin wrapper so the classic script below can call Firebase without needing
         // to be a module itself. All protected club data lives under the "clubData"
@@ -1909,6 +1917,37 @@
             }
         }
 
+        // ================= REALTIME MEMBER SYNC (for pending-approval visibility) =================
+        // Without this, an Admin who is already signed in only ever sees the roster as of
+        // their last login/refresh — a new self-registration (or another Admin's approval)
+        // wouldn't show up until they reloaded the page. This subscribes to the "members"
+        // Firestore document live for the duration of the session, so new registrations,
+        // approvals, rejections, etc. appear immediately without any manual refresh.
+        let membersRealtimeUnsubscribe = null;
+        function startMembersRealtimeSync() {
+            if (membersRealtimeUnsubscribe) return;
+            try {
+                membersRealtimeUnsubscribe = window.fb.watchCollectionDoc('members', snap => {
+                    if (!snap || !snap.exists()) return;
+                    const data = snap.data();
+                    if (!data || !Array.isArray(data.items)) return;
+                    STATE.members = data.items;
+                    normalizeMemberRecords();
+                    populateUserSelector();
+                    renderSidebarNav();
+                    renderView(STATE.currentView);
+                });
+            } catch (err) {
+                console.error('Could not start realtime member sync:', err);
+            }
+        }
+        function stopMembersRealtimeSync() {
+            if (membersRealtimeUnsubscribe) {
+                try { membersRealtimeUnsubscribe(); } catch (err) { /* ignore */ }
+                membersRealtimeUnsubscribe = null;
+            }
+        }
+
         // Firebase Auth needs a real email. Every member record already has one (even the
         // demo "admin" account), so a plain username like "admin" is resolved to its member's
         // email before we ever call Firebase. Checks the public username index first (works
@@ -2407,6 +2446,7 @@
             switchAuthTab('login');
 
             initApp();
+            startMembersRealtimeSync();
 
             // First-login gate: a member whose profile has not been completed yet must
             // fill out the required Complete Member Profile form before doing anything else.
@@ -2761,6 +2801,8 @@
 
         async function handleLogout() {
             if (!confirm('Are you sure you want to log out?')) return;
+
+            stopMembersRealtimeSync();
 
             const account = STATE.members.find(m => m.id === STATE.auth.userId);
             if (account) recordLogout(account);
@@ -7238,6 +7280,48 @@
 
         function renderMyTournamentsView(container) {
             renderTournamentsView(container);
+
+            // Prepend the member's self-reported Tournament History (collected during
+            // Complete Your Member Profile) above the general tournament circuit list.
+            // This is separate from admin-managed STATE.tournaments — it's exactly what the
+            // member typed in on their own, and updates automatically whenever they save
+            // changes to it, with no manual entry needed here.
+            const user = STATE.members.find(m => m.id === STATE.activeUserId) || STATE.members[0];
+            const history = (user && Array.isArray(user.tournamentHistory)) ? user.tournamentHistory : [];
+
+            const medalStyle = (medal) => medal === 'Gold' ? 'background:rgba(234,179,8,0.15);color:#EAB308;border:1px solid rgba(234,179,8,0.35);'
+                : medal === 'Silver' ? 'background:rgba(148,163,184,0.15);color:#94A3B8;border:1px solid rgba(148,163,184,0.35);'
+                : medal === 'Bronze' ? 'background:rgba(217,119,6,0.15);color:#D97706;border:1px solid rgba(217,119,6,0.35);'
+                : 'background:rgba(107,114,128,0.15);color:#9CA3AF;border:1px solid rgba(107,114,128,0.35);';
+
+            const historyHtml = `
+                <div class="view-shell" style="margin-bottom:1.5rem">
+                    <div class="glass-panel p-5 rounded-2xl border border-brand-border space-y-3">
+                        <div class="flex items-center justify-between flex-wrap gap-2">
+                            <h3 class="text-sm font-extrabold text-white flex items-center">
+                                <i class="fa-solid fa-trophy text-brand-red mr-2"></i> My Tournament History
+                            </h3>
+                            <span class="text-[10px] text-gray-500">Self-reported on your profile — ${history.length} entr${history.length === 1 ? 'y' : 'ies'}</span>
+                        </div>
+                        ${history.length ? `
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            ${history.map(t => `
+                                <div class="bg-brand-dark/40 border border-brand-border/60 rounded-xl p-3 flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-bold text-white truncate">${t.name}</p>
+                                        <p class="text-[10px] text-gray-400 mt-1">${t.type} · ${t.classification}</p>
+                                        <p class="text-[10px] text-gray-500 mt-0.5"><i class="fa-solid fa-weight-hanging mr-1"></i>${t.category}</p>
+                                        <p class="text-[10px] text-gray-500"><i class="fa-solid fa-location-dot mr-1"></i>${t.venue} · ${t.date}</p>
+                                    </div>
+                                    <span class="text-[10px] font-bold px-2 py-1 rounded-lg shrink-0" style="${medalStyle(t.medal)}">${t.medal}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                        ` : '<p class="text-xs text-gray-500 italic">You haven\'t added any tournaments to your profile yet.</p>'}
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('afterbegin', historyHtml);
         }
 
         function renderMyCertificatesView(container) {
