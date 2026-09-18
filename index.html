@@ -46,7 +46,7 @@
             sendPasswordResetEmail
         } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
         import {
-            getFirestore, doc, getDoc, setDoc
+            getFirestore, doc, getDoc, setDoc, onSnapshot
         } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
         // Your web app's Firebase configuration (project: taekwando-5bae0)
@@ -103,6 +103,11 @@
             watchAuth: (cb) => onAuthStateChanged(fbAuth, cb),
             loadCollectionDoc: (key) => getDoc(doc(fbDb, 'clubData', key)),
             saveCollectionDoc: (key, data) => setDoc(doc(fbDb, 'clubData', key), data),
+            // Realtime listener on one clubData/{key} document — used so an Admin who is
+            // already signed in sees new self-registrations (and other members' changes)
+            // show up live, without needing to log out/in or refresh the page. Returns the
+            // unsubscribe function.
+            watchCollectionDoc: (key, cb) => onSnapshot(doc(fbDb, 'clubData', key), cb),
             loadPublicDoc: (key) => getDoc(doc(fbDb, 'publicIndex', key)),
             savePublicDoc: (key, data) => setDoc(doc(fbDb, 'publicIndex', key), data),
             // ================= ROLE LOOKUP (roles/{uid}) =================
