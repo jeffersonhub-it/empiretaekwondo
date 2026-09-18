@@ -1584,22 +1584,28 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                     const membersRef = doc(bootstrapDb, 'clubData', 'members');
                     const membersSnap = await getDoc(membersRef);
                     const items = (membersSnap.exists() && Array.isArray(membersSnap.data().items)) ? membersSnap.data().items : [];
-                    if (!items.some(m => m.email && m.email.toLowerCase() === email.toLowerCase())) {
+                    const existingIndex = items.findIndex(m => m.email && m.email.toLowerCase() === email.toLowerCase());
+                    if (existingIndex === -1) {
                         items.push({ ...memberDraft, email: email });
                         await setDoc(membersRef, { items: items });
-
-                        const indexRef = doc(bootstrapDb, 'publicIndex', 'usernameIndex');
-                        const indexSnap = await getDoc(indexRef);
-                        const map = (indexSnap.exists() && indexSnap.data().map) ? indexSnap.data().map : {};
-                        map[memberDraft.username.toLowerCase()] = email;
-                        await setDoc(indexRef, { map: map });
+                    } else {
+                        // Repair/upgrade an older partially-created Main Admin record.
+                        items[existingIndex] = { ...items[existingIndex], ...memberDraft, email: email, accountStatus: 'approved', authRole: 'admin' };
+                        await setDoc(membersRef, { items: items });
                     }
 
+                    // Always repair the public username index, even if the member record
+                    // already existed from a previous incomplete bootstrap.
+                    const indexRef = doc(bootstrapDb, 'publicIndex', 'usernameIndex');
+                    const indexSnap = await getDoc(indexRef);
+                    const map = (indexSnap.exists() && indexSnap.data().map) ? indexSnap.data().map : {};
+                    map[memberDraft.username.toLowerCase()] = email;
+                    await setDoc(indexRef, { map: map });
+
+                    // Always enforce the built-in account's authoritative role. This repairs
+                    // an incomplete/incorrect role document from an earlier setup attempt.
                     const roleRef = doc(bootstrapDb, 'roles', uid);
-                    const roleSnap = await getDoc(roleRef);
-                    if (!roleSnap.exists()) {
-                        await setDoc(roleRef, { authRole: 'admin' });
-                    }
+                    await setDoc(roleRef, { authRole: 'admin' });
                 } finally {
                     try { await signOut(bootstrapAuth); } catch (e) { /* ignore */ }
                     try { await deleteApp(bootstrapApp); } catch (e) { /* ignore */ }
@@ -3078,15 +3084,6 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
             return STATE.currentRole === 'admin';
         }
 
-        // Main Admin is the permanent built-in administrator responsible for reviewing
-        // self-registrations. Other Admin accounts may use Admin functions, but they cannot
-        // approve, reject, disable, or reactivate accounts.
-        function isMainAdmin() {
-            const currentEmail = window.fb?.auth?.currentUser?.email?.toLowerCase();
-            const mainAdmin = STATE.members.find(m => m.id === 'main-admin');
-            return STATE.currentRole === 'admin' && !!mainAdmin && !!currentEmail && mainAdmin.email?.toLowerCase() === currentEmail;
-        }
-
         function memberTypeLabel(type) {
             return { member: 'Member', senior: 'Senior', instructor: 'Instructor' }[type] || 'Member';
         }
@@ -3388,6 +3385,9 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
         // bundled demo data, or the real roster if it's already been loaded this session).
         function resolveLoginEmail(identifier) {
             if (identifier.includes('@')) return identifier;
+            // Built-in Main Admin must remain loginable even if the public username index
+            // has not been populated yet (for example on the very first boot).
+            if (identifier === MAIN_ADMIN_USERNAME) return MAIN_ADMIN_EMAIL;
             if (USERNAME_INDEX[identifier]) return USERNAME_INDEX[identifier];
             const match = STATE.members.find(m => m.username && m.username.toLowerCase() === identifier);
             return match ? match.email : null;
@@ -3409,8 +3409,9 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                 await ensureFirebaseReady();
                 // Cheap guard: the public username index is already loaded by this point in
                 // bootApp(), so most boots skip the network calls below entirely.
-                if (USERNAME_INDEX[MAIN_ADMIN_USERNAME]) return;
-
+                // Do not return merely because the username index exists: an earlier
+                // bootstrap may have created only part of the account. The bootstrap routine
+                // below is idempotent and repairs the member/index/role records.
                 const memberDraft = {
                     id: 'main-admin',
                     name: 'Main Admin',
@@ -3532,7 +3533,17 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
             const identifier = document.getElementById('loginIdentifier').value.trim().toLowerCase();
             const password = document.getElementById('loginPassword').value;
 
-            const email = resolveLoginEmail(identifier);
+            // The built-in Main Admin is always resolved to its dedicated Firebase Auth email.
+            // If the account has not been seeded yet, seed it immediately before attempting login.
+            let email = resolveLoginEmail(identifier);
+            if (identifier === MAIN_ADMIN_USERNAME) {
+                email = MAIN_ADMIN_EMAIL;
+                try {
+                    await ensureMainAdminSeeded();
+                } catch (seedErr) {
+                    console.error('Main Admin bootstrap failed before login:', seedErr);
+                }
+            }
             if (!email) {
                 showAuthMessage('No account found with that username or email.', 'error');
                 return;
@@ -6081,8 +6092,7 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                             `}
                         </div>
 
-                        <!-- Account approval status: Main Admin only -->
-                        ${isMainAdmin() && member.id !== 'main-admin' ? `
+                        <!-- Account approval status: approve / reject / disable / reactivate -->
                         <div class="bg-brand-dark/40 p-4 rounded-xl border border-brand-border/60 space-y-3 lg:col-span-2">
                             <h4 class="text-xs font-bold uppercase tracking-wider flex items-center" style="color:var(--accent)">
                                 <i class="fa-solid fa-user-check mr-1.5"></i> Account Approval Status
@@ -6097,7 +6107,7 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                                         </div>
                                         <span class="chip" style="border-color:${meta.color}55;color:${meta.color};background:${meta.color}1f">${meta.label}</span>
                                     </div>
-                                    <p class="text-[10px] text-gray-500 leading-relaxed">Only the Main Admin can change this. Regular Admins and Members cannot approve, reject, disable, or reactivate accounts.</p>
+                                    <p class="text-[10px] text-gray-500 leading-relaxed">Only Admin can change this. Members can never approve, reject, disable, or reactivate their own — or anyone else's — account.</p>
                                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                         ${meta.status !== 'approved' ? `
                                             <button type="button" onclick="setMemberAccountStatus('${member.id}', 'approved')" class="px-3 py-2.5 text-xs font-bold rounded-xl flex items-center justify-center" style="background:rgba(16,185,129,0.14);color:#10B981;border:1px solid rgba(16,185,129,0.35)">
@@ -6118,11 +6128,6 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                                 `;
                             })()}
                         </div>
-                        ` : `
-                        <div class="bg-brand-dark/40 p-4 rounded-xl border border-brand-border/60 lg:col-span-2">
-                            <p class="text-[10px] text-gray-500 flex items-center gap-2"><i class="fa-solid fa-lock"></i> Account approval is controlled by the Main Admin.</p>
-                        </div>
-                        `}
                         </div>
                     </div>
                 `;
@@ -6158,20 +6163,16 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
             }
         }
 
-        // Main-Admin-only: change a member's account approval status. Never reachable by a regular Admin or member
+        // Admin-only: change a member's account approval status. Never reachable by a member
         // for their own account or anyone else's — the UI that calls this only ever renders
         // inside the Admin member editor (see openMemberProfileEditor), and this defensive
         // check backs that up in case it's ever called from anywhere else.
         function setMemberAccountStatus(memberId, newStatus) {
-            // Only the permanent Main Admin may make account-approval decisions.
-            if (!isMainAdmin()) {
-                showToastNotification('Only the Main Admin can approve or change account approval status.');
-                return;
-            }
+            if (STATE.currentRole !== 'admin') return;
             if (!['pending', 'approved', 'rejected', 'disabled'].includes(newStatus)) return;
             const member = STATE.members.find(m => m.id === memberId);
             if (!member) return;
-            if (member.id === 'main-admin' || member.id === STATE.auth.userId) {
+            if (member.id === STATE.auth.userId) {
                 showToastNotification('You cannot change the account status of the account you are signed in with.');
                 return;
             }
