@@ -1552,6 +1552,40 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
             // editing this doc (or the members array) directly in Firestore.
             saveRoleDoc: (uid, authRole) => setDoc(doc(fbDb, 'roles', uid), { authRole: authRole }),
             loadRoleDoc: (uid) => getDoc(doc(fbDb, 'roles', uid)),
+            // Repairs the built-in Main Admin AFTER Firebase Auth has successfully signed in.
+            // This is important on a fresh project: some Firestore rules allow a newly-created
+            // user to create their own roles/{uid} document, but do not allow an unauthenticated
+            // or non-admin secondary session to create clubData/members. By doing the repair from
+            // the real signed-in session, the rules can see request.auth.uid.
+            repairMainAdminRecord: async (memberDraft) => {
+                const user = fbAuth.currentUser;
+                if (!user) throw new Error('Main Admin repair requires an authenticated Firebase user.');
+                const uid = user.uid;
+                const email = user.email || memberDraft.email;
+
+                // Establish the authoritative admin role first. This is intentionally the same
+                // one-time role document used by the normal registration flow.
+                await setDoc(doc(fbDb, 'roles', uid), { authRole: 'admin' });
+
+                const membersRef = doc(fbDb, 'clubData', 'members');
+                const membersSnap = await getDoc(membersRef);
+                const items = (membersSnap.exists() && Array.isArray(membersSnap.data().items))
+                    ? membersSnap.data().items.slice()
+                    : [];
+                const existingIndex = items.findIndex(m => m.email && m.email.toLowerCase() === email.toLowerCase());
+                const repaired = { ...memberDraft, id: 'main-admin', email: email, authRole: 'admin', accountStatus: 'approved', status: 'Active' };
+                if (existingIndex === -1) items.push(repaired);
+                else items[existingIndex] = { ...items[existingIndex], ...repaired };
+                await setDoc(membersRef, { items });
+
+                // Also repair the public username -> email lookup used by the login screen.
+                const indexRef = doc(fbDb, 'publicIndex', 'usernameIndex');
+                const indexSnap = await getDoc(indexRef);
+                const map = (indexSnap.exists() && indexSnap.data().map) ? { ...indexSnap.data().map } : {};
+                map[memberDraft.username.toLowerCase()] = email;
+                await setDoc(indexRef, { map });
+                return { uid, email };
+            },
 
             // ================= ONE-TIME MAIN ADMIN BOOTSTRAP =================
             // Used once (by ensureMainAdminSeeded() below) to guarantee a built-in Main Admin
@@ -3404,6 +3438,39 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
         const MAIN_ADMIN_EMAIL = 'iss@mainadmin.local';
         const MAIN_ADMIN_PASSWORD = 'smeagol';
 
+        function buildMainAdminDraft() {
+            return {
+                id: 'main-admin',
+                name: 'Main Admin',
+                username: MAIN_ADMIN_USERNAME,
+                authRole: 'admin',
+                memberType: 'instructor',
+                role: 'Admin / Head Instructor',
+                accountStatus: 'approved',
+                belt: 'Black Belt (9th Dan/Poom)',
+                beltCode: 'black',
+                danLevel: 9,
+                dob: '',
+                gender: 'Unspecified',
+                phone: 'Not Provided',
+                address: 'Not Provided',
+                emergencyContactName: 'Not Provided',
+                emergencyContactRelation: 'Not Provided',
+                emergencyPhone: 'Not Provided',
+                kukkiwonId: 'N/A',
+                branch: 'Main Hombu Branch',
+                weightClass: 'Not Assigned',
+                joinDate: new Date().toISOString().split('T')[0],
+                status: 'Active',
+                avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
+                medical: 'None',
+                emergencyContact: 'Not Provided',
+                bio: '',
+                directoryPrivacy: defaultDirectoryPrivacy(),
+                profileComplete: true
+            };
+        }
+
         async function ensureMainAdminSeeded() {
             try {
                 await ensureFirebaseReady();
@@ -3412,38 +3479,7 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                 // Do not return merely because the username index exists: an earlier
                 // bootstrap may have created only part of the account. The bootstrap routine
                 // below is idempotent and repairs the member/index/role records.
-                const memberDraft = {
-                    id: 'main-admin',
-                    name: 'Main Admin',
-                    username: MAIN_ADMIN_USERNAME,
-                    authRole: 'admin',
-                    memberType: 'instructor',
-                    role: 'Admin / Head Instructor',
-                    // Built-in Admin is auto-approved — no registration to review.
-                    accountStatus: 'approved',
-                    belt: 'Black Belt (9th Dan/Poom)',
-                    beltCode: 'black',
-                    danLevel: 9,
-                    dob: '',
-                    gender: 'Unspecified',
-                    phone: 'Not Provided',
-                    address: 'Not Provided',
-                    emergencyContactName: 'Not Provided',
-                    emergencyContactRelation: 'Not Provided',
-                    emergencyPhone: 'Not Provided',
-                    kukkiwonId: 'N/A',
-                    branch: 'Main Hombu Branch',
-                    weightClass: 'Not Assigned',
-                    joinDate: new Date().toISOString().split('T')[0],
-                    status: 'Active',
-                    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
-                    medical: 'None',
-                    emergencyContact: 'Not Provided',
-                    bio: '',
-                    directoryPrivacy: defaultDirectoryPrivacy(),
-                    profileComplete: true
-                };
-
+                const memberDraft = buildMainAdminDraft();
                 await window.fb.bootstrapMemberRecord(MAIN_ADMIN_EMAIL, MAIN_ADMIN_PASSWORD, memberDraft);
                 // Refresh the local cache so "iss" resolves to an email immediately, without
                 // requiring a page reload, if someone tries to log in right after first boot.
@@ -3558,9 +3594,34 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                     // Firebase Authentication is the ONLY place that verifies a password.
                     await window.fb.signIn(email, password);
                 } catch (signInErr) {
-                    showAuthMessage('Incorrect password. Please try again.', 'error');
+                    console.error('Firebase sign-in failed:', signInErr);
+                    const code = signInErr && signInErr.code ? signInErr.code : '';
+                    const signInMessage = code === 'auth/operation-not-allowed'
+                        ? 'Firebase Email/Password sign-in is disabled. Enable it in Firebase Authentication > Sign-in method.'
+                        : code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found'
+                            ? 'Invalid Main Admin email/password. Check the Firebase Authentication account.'
+                            : 'Could not sign in to Firebase. Please try again.';
+                    showAuthMessage(signInMessage, 'error');
                     if (submitBtn) submitBtn.disabled = false;
                     return;
+                }
+
+                // Main Admin repair happens again from the authenticated PRIMARY Firebase
+                // session. This fixes the exact situation where Auth exists but the member
+                // document was not created by the earlier bootstrap attempt.
+                if (identifier === MAIN_ADMIN_USERNAME && window.fb.auth.currentUser) {
+                    try {
+                        await window.fb.repairMainAdminRecord(buildMainAdminDraft());
+                    } catch (repairErr) {
+                        console.error('Main Admin Firestore repair failed:', repairErr);
+                        const repairCode = repairErr && repairErr.code ? repairErr.code : '';
+                        if (repairCode === 'permission-denied') {
+                            showAuthMessage('Firebase login succeeded, but Firestore blocked the Main Admin setup. Update the Firestore Rules to allow the Main Admin bootstrap.', 'error');
+                            try { await window.fb.signOutUser(); } catch (e) { /* ignore */ }
+                            if (submitBtn) submitBtn.disabled = false;
+                            return;
+                        }
+                    }
                 }
 
                 // Now signed in — pull the real, protected roster (and everything else) down
