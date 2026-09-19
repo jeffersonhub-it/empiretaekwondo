@@ -5938,8 +5938,9 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                 // Admin approval). Older records won't have this field — default to an
                 // empty array rather than leaving it undefined.
                 if (!Array.isArray(m.tournamentHistory)) m.tournamentHistory = [];
-                if (!Array.isArray(m.awardCertificates)) m.awardCertificates = [];
-                m.tournamentHistory.forEach((t, i) => { if (t && typeof t === 'object' && !t.id) t.id = `${m.id}_th${i}`; });
+                // NOTE: normalizing must never add NEW fields to other members' records (e.g. an empty
+                // certificates list) — Firestore's member self-update rule only allows a write in which
+                // exactly ONE record (the member's own) differs from what is stored on the server.
                 // Also make sure any newly-added DIRECTORY_FIELDS (like 'status' and 'bio')
                 // have an explicit entry on older directoryPrivacy objects — missing keys
                 // already default to "visible" via isDirectoryFieldVisible's `!== false` check,
@@ -11150,7 +11151,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                                                 <span class="text-[10px] font-bold px-2 py-1 rounded-lg" style="${medalStyle(t.medal)}">${t.medal}</span>
                                             </td>
                                             <td class="px-4 py-3 text-right whitespace-nowrap">
-                                                <button onclick="deleteMyTournamentHistoryEntry('${t.id}')" title="Remove" class="w-7 h-7 inline-flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg transition-all"><i class="fa-solid fa-trash"></i></button>
+                                                <button onclick="deleteMyTournamentHistoryEntry('${t.id || (user.id + '_th' + history.indexOf(t))}')" title="Remove" class="w-7 h-7 inline-flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg transition-all"><i class="fa-solid fa-trash"></i></button>
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -11263,7 +11264,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const user = STATE.members.find(m => m.id === STATE.activeUserId) || STATE.members[0];
             if (!user || !Array.isArray(user.tournamentHistory)) return;
             if (!confirm('Remove this tournament from your history?')) return;
-            user.tournamentHistory = user.tournamentHistory.filter(t => t.id !== entryId);
+            user.tournamentHistory = user.tournamentHistory.filter((t, i) => (t.id || `${user.id}_th${i}`) !== entryId);
             recordActivity('Removed Tournament History', user, `${user.name} removed a tournament from their history.`, user);
             persistCollection('members');
             renderView(STATE.currentView);
