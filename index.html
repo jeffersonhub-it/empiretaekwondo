@@ -7429,6 +7429,10 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
                 if ((t.participants || []).some(p => p.memberId === member.id)) names.add(String(t.title || '').trim().toLowerCase());
             });
             getMemberTournamentHistory(member).forEach(t => names.add(String(t.name).trim().toLowerCase()));
+            // Tournaments named on club-logged medals/trophies also count as events competed in.
+            (STATE.achievements || []).filter(a => a.memberId === member.id && a.tournament)
+                .forEach(a => names.add(String(a.tournament).trim().toLowerCase()));
+            names.delete('');
             return names.size;
         }
 
@@ -10889,12 +10893,16 @@ var R0=Object.defineProperty;var O0=(o,g,r)=>g in o?R0(o,g,{enumerable:!0,config
 
             recordActivity('Added Tournament History', user, `${user.name} added "${name}" to their tournament history.`, user);
 
-            // Save straight to Firestore via the app's existing members persistence path.
-            await persistCollection('members');
+            // Save straight to Firestore. If the save is rejected, tell the member instead of
+            // silently losing the entry when the live member sync reloads the roster.
+            let saved = true;
+            try { await persistCollectionStrict('members'); } catch (err) { saved = false; }
 
             closeModal();
             renderView(STATE.currentView);
-            showToastNotification(`"${name}" added to your tournament history.`);
+            showToastNotification(saved
+                ? `"${name}" added to your tournament history.`
+                : `"${name}" could not be saved to the server — check your connection/permissions and try again.`);
         }
 
         function deleteMyTournamentHistoryEntry(entryId) {
