@@ -2151,6 +2151,35 @@
             }
         }
 
+        // ================= REALTIME TOURNAMENTS SYNC =================
+        // Only Admin can add/edit/delete tournaments (see the isAdmin checks in the
+        // Tournaments module), but every signed-in member should see a newly-added event
+        // show up in their own Tournaments / Upcoming Tournaments spotlight right away —
+        // without having to log out and back in. Mirrors startMembersRealtimeSync above,
+        // just watching the "tournaments" Firestore document instead of "members".
+        let tournamentsRealtimeUnsubscribe = null;
+        function startTournamentsRealtimeSync() {
+            if (tournamentsRealtimeUnsubscribe) return;
+            try {
+                tournamentsRealtimeUnsubscribe = window.fb.watchCollectionDoc('tournaments', snap => {
+                    if (!snap || !snap.exists()) return;
+                    const data = snap.data();
+                    if (!data || !Array.isArray(data.items)) return;
+                    STATE.tournaments = data.items;
+                    renderSidebarNav();
+                    renderView(STATE.currentView);
+                });
+            } catch (err) {
+                console.error('Could not start realtime tournaments sync:', err);
+            }
+        }
+        function stopTournamentsRealtimeSync() {
+            if (tournamentsRealtimeUnsubscribe) {
+                try { tournamentsRealtimeUnsubscribe(); } catch (err) { /* ignore */ }
+                tournamentsRealtimeUnsubscribe = null;
+            }
+        }
+
         // Firebase Auth needs a real email. Every member record already has one (even the
         // demo "admin" account), so a plain username like "admin" is resolved to its member's
         // email before we ever call Firebase. Checks the public username index first (works
@@ -3030,6 +3059,7 @@
 
             initApp();
             startMembersRealtimeSync();
+            startTournamentsRealtimeSync();
 
             // First-login gate: a member whose profile has not been completed yet must
             // fill out the required Complete Member Profile form before doing anything else.
@@ -3386,6 +3416,7 @@
             if (!(await appConfirm('Are you sure you want to log out?'))) return;
 
             stopMembersRealtimeSync();
+            stopTournamentsRealtimeSync();
 
             const account = STATE.members.find(m => m.id === STATE.auth.userId);
             if (account) recordLogout(account);
@@ -8725,6 +8756,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
 
             const html = `
                 <div class="view-shell animate-rise">
+                    ${tournamentSpotlightHtml()}
                     <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                         <div class="hero-figure"></div>
                         <div class="flex items-start gap-4 min-w-0">
