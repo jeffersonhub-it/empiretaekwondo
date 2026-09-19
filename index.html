@@ -7713,7 +7713,9 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             } catch (err) {
                 owner.awardCertificates.pop();
                 if (btn) { btn.disabled = false; btn.textContent = 'Create Certificate'; }
-                showToastNotification(err && /nearly full/.test(err.message || '') ? err.message : 'Could not save to the server — check your connection/permissions and try again.');
+                console.error('Certificate save failed:', err);
+                const code = (err && (err.code || err.message)) ? String(err.code || err.message) : 'unknown';
+                showToastNotification(err && /nearly full/.test(err.message || '') ? err.message : `Could not save to the server (${code}). ` + (/permission/i.test(code) ? 'Your Firestore Rules do not allow this account to update the members list.' : 'Check your connection and try again.'));
                 return;
             }
             recordActivity('Created Certificate', owner, `${isAdmin && owner.id !== STATE.activeUserId ? 'A certificate was issued to' : ''} ${owner.name} — "${entry.title}".`.trim(), owner);
@@ -11248,7 +11250,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             // Save straight to Firestore. If the save is rejected, tell the member instead of
             // silently losing the entry when the live member sync reloads the roster.
             let saved = true;
-            try { await persistCollectionStrict('members'); } catch (err) { saved = false; }
+            try { await persistCollectionStrict('members'); } catch (err) { saved = false; console.error('Tournament history save failed:', err); }
 
             closeModal();
             renderView(STATE.currentView);
