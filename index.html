@@ -6737,6 +6737,54 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             }
         }
 
+        // Announcement-style spotlight banner for upcoming tournaments/events — shown at the
+        // top of the Tournaments view (admin AND member, since both go through
+        // renderTournamentsView) so upcoming competitions get the same "announcement" treatment
+        // as posts in the Club News / Announcements module, instead of just sitting quietly in
+        // the general tournament grid below.
+        function tournamentSpotlightHtml() {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const upcoming = STATE.tournaments
+                .filter(t => (t.status === 'Upcoming' || t.status === 'Registration Open') && t.date >= todayStr)
+                .sort((a, b) => new Date(a.date) - new Date(b.date))
+                .slice(0, 4);
+
+            if (!upcoming.length) return '';
+
+            const daysUntil = (dateStr) => {
+                const diff = Math.ceil((new Date(dateStr) - new Date(todayStr)) / 86400000);
+                if (diff <= 0) return 'Today';
+                if (diff === 1) return 'Tomorrow';
+                return `In ${diff} days`;
+            };
+
+            return `
+                <div class="glass-panel rounded-2xl border border-brand-red/40 overflow-hidden" style="background:linear-gradient(135deg, rgba(230,0,35,0.08), rgba(20,20,25,0.4));">
+                    <div class="p-5 pb-3 flex items-center justify-between flex-wrap gap-2">
+                        <h3 class="text-sm font-extrabold text-white flex items-center">
+                            <i class="fa-solid fa-bullhorn text-brand-red mr-2"></i> Upcoming Tournaments &amp; Events
+                        </h3>
+                        <span class="text-[10px] text-gray-400 uppercase font-bold tracking-wide">Announcement</span>
+                    </div>
+                    <div class="px-5 pb-5 grid grid-cols-1 md:grid-cols-2 ${upcoming.length > 2 ? 'lg:grid-cols-4' : ''} gap-3">
+                        ${upcoming.map(t => `
+                            <div class="bg-brand-dark/50 border border-brand-border rounded-xl p-4 flex flex-col justify-between gap-3 hover:border-brand-red/50 transition-all cursor-pointer" onclick="openTournamentDetailsModal('${t.id}')">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${tournamentStatusBadgeClass(t.status)}">${t.status}</span>
+                                    <span class="text-[9px] font-bold text-brand-red uppercase">${daysUntil(t.date)}</span>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-bold text-white truncate">${t.title}</p>
+                                    <p class="text-[10px] text-gray-400 mt-1"><i class="fa-solid fa-calendar mr-1"></i>${t.date}</p>
+                                    <p class="text-[10px] text-gray-400 truncate"><i class="fa-solid fa-location-dot mr-1"></i>${t.location}</p>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
         function renderTournamentsView(container) {
             const f = STATE.tournamentFilters;
             const isAdmin = STATE.currentRole === 'admin';
@@ -6772,6 +6820,8 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                             </button>
                         ` : ''}
                     </div>
+
+                    ${tournamentSpotlightHtml()}
 
                     <!-- Search & Filters -->
                     <div class="glass-panel p-4 rounded-2xl border border-brand-border flex flex-wrap gap-3 items-end">
