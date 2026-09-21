@@ -4237,9 +4237,9 @@
 
                     <!-- Club Photo Slideshow (5 slides) -->
                     <div class="glass-panel rounded-2xl border border-brand-border overflow-hidden">
-                        <div class="relative w-full aspect-[16/9] sm:aspect-[21/9] bg-brand-dark/60 overflow-hidden">
+                        <div class="relative w-full aspect-[16/9] sm:aspect-[21/9] bg-black overflow-hidden">
                             ${slides.length ? `
-                                <img id="aboutSlideImg" src="${slides[aboutSlideIndex].url}" alt="Empire Taekwondo Gym photo" class="w-full h-full object-cover transition-opacity duration-300">
+                                <img id="aboutSlideImg" src="${slides[aboutSlideIndex].url}" alt="Empire Taekwondo Gym photo" class="w-full h-full object-contain object-center transition-opacity duration-300">
                                 <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-4 pt-8 pb-3 flex items-end justify-between gap-2">
                                     <p id="aboutSlideCaption" class="text-xs sm:text-sm text-white font-semibold drop-shadow max-w-[75%]">${slides[aboutSlideIndex].caption || ''}</p>
                                     <span id="aboutSlideCounter" class="text-[10px] font-mono text-gray-200 bg-black/40 px-2 py-0.5 rounded-full shrink-0">${aboutSlideIndex + 1} / ${slides.length}</span>
@@ -4550,13 +4550,18 @@
                     <h3 class="text-lg font-extrabold text-white flex items-center">
                         <i class="fa-solid fa-images text-brand-red mr-2"></i> Edit Slideshow Photos (up to 5)
                     </h3>
-                    <p class="text-[11px] text-gray-400 -mt-2">Leave a slide's image URL blank to skip it — the slideshow only shows slides with a photo.</p>
+                    <p class="text-[11px] text-gray-400 -mt-2">Attach a photo from your device, or paste an image URL instead. Leave a slide blank to skip it — the slideshow only shows slides with a photo.</p>
                     <form onsubmit="handleSaveClubSlides(event)" class="space-y-2.5">
                         ${slides.map((s, i) => `
                             <div class="grid grid-cols-4 gap-2 items-start bg-brand-dark/40 border border-brand-border rounded-xl p-2.5">
-                                <img src="${s.url || ''}" onerror="this.style.visibility='hidden'" class="col-span-1 w-full h-14 object-cover rounded-lg border border-brand-border bg-black/30">
+                                <img id="cpSlidePreview${i}" src="${s.url || ''}" onerror="this.style.visibility='hidden'" class="col-span-1 w-full h-14 object-cover rounded-lg border border-brand-border bg-black/30">
                                 <div class="col-span-3 space-y-1.5">
-                                    <input type="text" id="cpSlideUrl${i}" value="${s.url || ''}" placeholder="Slide ${i + 1} image URL" class="w-full bg-brand-dark border border-brand-border rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-brand-red">
+                                    <div class="flex items-center gap-2">
+                                        <label for="cpSlideFile${i}" class="cursor-pointer shrink-0 px-2.5 py-1.5 bg-brand-border hover:bg-gray-700 text-gray-200 text-[10px] font-bold rounded-lg transition-all"><i class="fa-solid fa-upload mr-1"></i> Attach Photo</label>
+                                        <input type="file" id="cpSlideFile${i}" accept="image/*" onchange="handleClubSlideFileUpload(event, ${i})" class="hidden">
+                                        <input type="text" id="cpSlideUrl${i}" value="${s.url || ''}" oninput="document.getElementById('cpSlidePreview${i}').src=this.value" placeholder="Slide ${i + 1} image URL, or attach a photo" class="w-full bg-brand-dark border border-brand-border rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-brand-red">
+                                        <button type="button" title="Clear slide" onclick="clearClubSlide(${i})" class="shrink-0 w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-400"><i class="fa-solid fa-xmark"></i></button>
+                                    </div>
                                     <input type="text" id="cpSlideCaption${i}" value="${s.caption || ''}" placeholder="Caption (optional)" class="w-full bg-brand-dark border border-brand-border rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-brand-red">
                                 </div>
                             </div>
@@ -4570,6 +4575,34 @@
             `;
             openModal(html);
         }
+        // Reads a chosen slideshow photo into a base64 data URL (same pattern used for the
+        // registration avatar / certificate / announcement uploads elsewhere in this file),
+        // then drops it straight into that slide's URL field so the existing save logic
+        // (handleSaveClubSlides) needs no changes.
+        function handleClubSlideFileUpload(e, i) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const urlEl = document.getElementById('cpSlideUrl' + i);
+                const previewEl = document.getElementById('cpSlidePreview' + i);
+                if (urlEl) urlEl.value = evt.target.result;
+                if (previewEl) { previewEl.style.visibility = 'visible'; previewEl.src = evt.target.result; }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearClubSlide(i) {
+            const urlEl = document.getElementById('cpSlideUrl' + i);
+            const capEl = document.getElementById('cpSlideCaption' + i);
+            const fileEl = document.getElementById('cpSlideFile' + i);
+            const previewEl = document.getElementById('cpSlidePreview' + i);
+            if (urlEl) urlEl.value = '';
+            if (capEl) capEl.value = '';
+            if (fileEl) fileEl.value = '';
+            if (previewEl) { previewEl.src = ''; previewEl.style.visibility = 'hidden'; }
+        }
+
         function handleSaveClubSlides(event) {
             event.preventDefault();
             if (!isAdmin()) return;
