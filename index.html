@@ -3070,6 +3070,177 @@
             }
         }
 
+        // ================= TERMS & CONDITIONS (FIRST-LOGIN, BEFORE PROFILE FORM) =================
+        // Bump this string whenever the wording below changes materially — it is saved on the
+        // member record together with the acceptance timestamp as proof of what was agreed to.
+        const TERMS_VERSION = '2026-09';
+
+        function termsContentHtml() {
+            const h = (icon, title) => `<h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center mt-5 first:mt-0"><i class="fa-solid ${icon} text-brand-red mr-2 w-4 text-center"></i>${title}</h4>`;
+            const p = (t) => `<p class="text-[11px] text-gray-300 leading-relaxed mt-1.5">${t}</p>`;
+            const li = (items) => `<ul class="list-disc pl-5 mt-1.5 space-y-1 text-[11px] text-gray-300 leading-relaxed">${items.map(i => `<li>${i}</li>`).join('')}</ul>`;
+            return `
+                ${h('fa-id-card', '1. Membership')}
+                ${p('By creating an account you become a registered member of Empire Taekwondo Gym / Team. Membership is personal and non-transferable. Members agree to:')}
+                ${li([
+                    'follow the instructions of the Master, instructors and Admins, and observe the dojang etiquette and safety rules;',
+                    'treat teammates, coaches and opponents with respect, on and off the mat, including online;',
+                    'attend trainings and team activities responsibly and inform the coach when unable to attend or when injured;',
+                    'keep their account details accurate and up to date.'
+                ])}
+
+                ${h('fa-user-check', '2. Accuracy of Information')}
+                ${p('You confirm that everything you enter in the system (personal details, belt rank, weight class, Kukkiwon certificate number, emergency contact and medical notes) is true and correct. Wrong or misleading information may affect your safety, tournament eligibility and certificates, and may lead to correction, suspension or removal of your membership.')}
+
+                ${h('fa-users', '3. Team Profile & Member Directory')}
+                ${p('Your team profile is part of the club\'s Member Directory. Other signed-in members and the club\'s Admins can see the profile fields that your Privacy Settings allow, such as name, photo, belt rank, branch, status and bio. Admins and instructors may see your full record for training, safety and administrative purposes. You can change what other members see at any time under My Privacy Settings. Do not post or upload anything that is offensive, false or that belongs to another person.')}
+
+                ${h('fa-trophy', '4. Tournament History & Achievements')}
+                ${li([
+                    'The tournaments, medals and results you enter are self-reported and must be true. The club may ask for proof (certificate, bracket, photo) and may correct or remove entries it cannot verify.',
+                    'Your tournament history and achievements may be used for team selection, rankings, certificates, announcements and the club\'s records.',
+                    'Claiming medals or events that did not happen is a serious violation and may result in removal from the team.'
+                ])}
+
+                ${h('fa-lock', '5. Data Privacy Notice (Data Privacy Act of 2012 / RA 10173)')}
+                ${p('<b class="text-white">What we collect:</b> your name, date of birth, gender, contact details, address, photo, emergency contact, medical conditions / allergies, belt rank, branch, weight class, Kukkiwon number, tournament history, attendance / login records and your activity in this system.')}
+                ${p('<b class="text-white">Why we collect it:</b> to manage your membership, trainings, gradings and tournaments, to keep you safe (including contacting your emergency contact and giving first aid), to issue certificates and announcements, and to keep club records.')}
+                ${p('<b class="text-white">Who can see it:</b> only the club\'s Admins / instructors can see your sensitive information (medical notes, emergency contact, date of birth, address). Other members only see the fields you leave visible in your Privacy Settings. We do not sell your personal information.')}
+                ${p('<b class="text-white">Where it is kept:</b> your data is stored in the club\'s cloud database (Google Firebase) and is protected by account login and access rules. It is kept while you are a member and for as long as needed for club records, or as required by law.')}
+                ${p('<b class="text-white">Your rights:</b> you may ask to access, correct, update or delete your personal data, to object to certain processing, and to withdraw your consent, by contacting the club Admin. Withdrawing consent may mean we can no longer keep your membership active.')}
+                ${p('<b class="text-white">Minors:</b> if you are under 18, your parent or legal guardian must read and agree to these terms and to the processing of your data on your behalf.')}
+
+                ${h('fa-camera', '6. Photos & Media')}
+                ${p('You allow the club to use your profile photo in the system, and photos or videos taken during official trainings, gradings and tournaments for team records, certificates, announcements and the club\'s social media. Tell the Admin if you do not want your photo published and we will respect it where reasonably possible.')}
+
+                ${h('fa-shield-halved', '7. Account Security')}
+                ${p('Keep your username and password private. You are responsible for activity under your account. Tell an Admin right away if you think someone else has accessed it. Login and activity records are kept for security and check-in purposes.')}
+
+                ${h('fa-kit-medical', '8. Health & Safety')}
+                ${p('Taekwondo is a full-contact sport and carries a risk of injury. You confirm that you are physically fit to train, that you have disclosed relevant medical conditions in your profile, and that you take part at your own risk, with the club\'s safety rules and your coach\'s guidance as the basis for training.')}
+
+                ${h('fa-scale-balanced', '9. Changes & Termination')}
+                ${p('The club may update these terms and will ask you to accept them again when the changes are significant. Membership may be suspended or ended for violation of these terms, for unsafe or disrespectful conduct, or for giving false information. You may request to close your account at any time by contacting the Admin.')}
+            `;
+        }
+
+        function openTermsModal(memberId) {
+            const member = STATE.members.find(m => m.id === memberId);
+            if (!member) return;
+
+            const modalHtml = `
+                <div class="p-6 space-y-4">
+                    <!-- No close/X button by design — accepting (or logging out) is required -->
+                    <div class="flex items-start gap-4 border-b border-brand-border pb-4">
+                        <div class="w-12 h-12 rounded-2xl bg-brand-red/15 border border-brand-red/40 flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-file-contract text-brand-red text-xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-extrabold text-white">Terms &amp; Conditions</h3>
+                            <p class="text-xs text-gray-400 mt-1">Welcome, ${member.name}! Before you fill out your member profile, please read the terms of your Empire Taekwondo membership, team profile and data privacy.</p>
+                        </div>
+                    </div>
+
+                    <!-- Step indicator -->
+                    <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
+                        <span class="w-6 h-6 rounded-full flex items-center justify-center bg-brand-red text-white">1</span>
+                        <span class="text-white">Terms</span>
+                        <span class="flex-1 h-px bg-brand-border mx-1"></span>
+                        <span class="w-6 h-6 rounded-full flex items-center justify-center bg-brand-border text-gray-400">2</span>
+                        <span class="text-gray-400">Personal Info</span>
+                        <span class="flex-1 h-px bg-brand-border mx-1"></span>
+                        <span class="w-6 h-6 rounded-full flex items-center justify-center bg-brand-border text-gray-400">3</span>
+                        <span class="text-gray-400">Tournament History</span>
+                    </div>
+
+                    <div id="termsScrollBox" onscroll="termsCheckScroll()" class="bg-brand-dark/60 border border-brand-border/60 rounded-xl p-4 overflow-y-auto" style="max-height:42vh">
+                        ${termsContentHtml()}
+                        <p class="text-[10px] text-gray-500 mt-5 pt-3 border-t border-brand-border/60">Version ${TERMS_VERSION}</p>
+                    </div>
+                    <p id="termsScrollHint" class="text-[10px] text-amber-400 flex items-center"><i class="fa-solid fa-arrow-down mr-1.5"></i> Scroll to the bottom of the terms to enable the checkboxes.</p>
+
+                    <div class="space-y-2.5">
+                        <label class="flex items-start gap-2.5 cursor-pointer">
+                            <input type="checkbox" id="termsAgreeCheck" disabled onchange="termsUpdateButton()" class="mt-0.5 w-4 h-4 accent-brand-red rounded shrink-0">
+                            <span class="text-[11px] text-gray-300 leading-relaxed">I have read and agree to the <b class="text-white">Terms &amp; Conditions</b> of my Empire Taekwondo membership and team profile.</span>
+                        </label>
+                        <label class="flex items-start gap-2.5 cursor-pointer">
+                            <input type="checkbox" id="termsPrivacyCheck" disabled onchange="termsUpdateButton()" class="mt-0.5 w-4 h-4 accent-brand-red rounded shrink-0">
+                            <span class="text-[11px] text-gray-300 leading-relaxed">I consent to the collection and processing of my personal and sensitive information (including medical and emergency details) as described in the <b class="text-white">Data Privacy Notice</b>. If I am under 18, my parent or guardian agrees on my behalf.</span>
+                        </label>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-3 pt-1">
+                        <button type="button" onclick="declineTerms()" class="px-4 py-2.5 bg-brand-dark border border-brand-border hover:border-brand-red text-gray-300 text-xs font-bold rounded-xl transition-all">
+                            Decline &amp; Log Out
+                        </button>
+                        <button type="button" id="termsAcceptBtn" onclick="acceptTerms('${member.id}')" disabled class="px-6 py-2.5 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center opacity-50 cursor-not-allowed">
+                            I Agree &amp; Continue <i class="fa-solid fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            openModal(modalHtml);
+            // Short screens / short content might not need scrolling at all — check right away.
+            setTimeout(termsCheckScroll, 50);
+        }
+
+        // Checkboxes stay locked until the member has scrolled to the end of the terms.
+        function termsCheckScroll() {
+            const box = document.getElementById('termsScrollBox');
+            if (!box) return;
+            const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
+            if (!atBottom) return;
+            ['termsAgreeCheck', 'termsPrivacyCheck'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = false;
+            });
+            const hint = document.getElementById('termsScrollHint');
+            if (hint) hint.style.display = 'none';
+        }
+
+        function termsUpdateButton() {
+            const a = document.getElementById('termsAgreeCheck');
+            const b = document.getElementById('termsPrivacyCheck');
+            const btn = document.getElementById('termsAcceptBtn');
+            if (!a || !b || !btn) return;
+            const ok = a.checked && b.checked;
+            btn.disabled = !ok;
+            btn.classList.toggle('opacity-50', !ok);
+            btn.classList.toggle('cursor-not-allowed', !ok);
+        }
+
+        async function acceptTerms(memberId) {
+            const member = STATE.members.find(m => m.id === memberId);
+            if (!member) return;
+            const a = document.getElementById('termsAgreeCheck');
+            const b = document.getElementById('termsPrivacyCheck');
+            if (!a || !b || !a.checked || !b.checked) return;
+
+            member.termsAccepted = true;
+            member.termsAcceptedAt = new Date().toISOString();
+            member.termsVersion = TERMS_VERSION;
+            recordActivity('Accepted Terms & Conditions', member, `${member.name} accepted the Terms & Conditions and Data Privacy consent (v${TERMS_VERSION}).`, member);
+
+            const btn = document.getElementById('termsAcceptBtn');
+            if (btn) { btn.disabled = true; btn.classList.add('opacity-50'); }
+            try {
+                await persistCollection('members');
+            } catch (err) {
+                console.error('Could not save Terms acceptance:', err);
+            }
+
+            // Straight on to the Personal Information / Tournament History form.
+            openCompleteProfileModal(memberId);
+        }
+
+        async function declineTerms() {
+            const ok = await appConfirm('You need to accept the Terms & Conditions to use your account. Do you want to decline and log out? You will be asked again the next time you sign in.');
+            if (!ok) return;
+            closeModal();
+            handleLogout(true);
+        }
+
         // ================= REQUIRED FIRST-LOGIN PROFILE COMPLETION =================
         // Shown automatically (see completeLogin) the very first time a newly registered
         // member logs in, whether they self-registered or were registered by Admin.
@@ -3078,6 +3249,14 @@
         function openCompleteProfileModal(memberId) {
             const member = STATE.members.find(m => m.id === memberId);
             if (!member) return;
+
+            // Terms & Conditions come FIRST: a newly registered member must read and accept
+            // them before the Personal Information / Tournament History form is shown.
+            // Once accepted, openTermsModal's accept handler re-calls this function.
+            if (!member.termsAccepted) {
+                openTermsModal(memberId);
+                return;
+            }
 
             const inputClass = "w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-red";
             const branchOptions = ['Main Hombu Branch', 'North Campus Branch', 'Westside Academy'];
@@ -3098,6 +3277,9 @@
 
                     <!-- Step indicator -->
                     <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
+                        <span class="w-6 h-6 rounded-full flex items-center justify-center bg-emerald-500 text-white"><i class="fa-solid fa-check text-[10px]"></i></span>
+                        <span class="text-emerald-400">Terms</span>
+                        <span class="flex-1 h-px bg-brand-border mx-1"></span>
                         <span id="cpStepDot1" class="w-6 h-6 rounded-full flex items-center justify-center bg-brand-red text-white">1</span>
                         <span class="text-gray-400">Personal Information</span>
                         <span class="flex-1 h-px bg-brand-border mx-1"></span>
@@ -3412,8 +3594,8 @@
             showToastNotification(`Welcome aboard, ${member.name}! Your profile is complete.`);
         }
 
-        async function handleLogout() {
-            if (!(await appConfirm('Are you sure you want to log out?'))) return;
+        async function handleLogout(skipConfirm) {
+            if (skipConfirm !== true && !(await appConfirm('Are you sure you want to log out?'))) return;
 
             stopMembersRealtimeSync();
             stopTournamentsRealtimeSync();
