@@ -3896,21 +3896,23 @@
                         { id: 'activity-log', label: 'Activity Log', icon: 'fa-file-pen', badge: STATE.activityLog.length }
                     ]
                 });
-            } else {
-                groups.push({
-                    id: 'account',
-                    label: 'My Account',
-                    icon: 'fa-user-gear',
-                    color: '#34D399',
-                    items: [
-                        { id: 'my-profile', label: 'Profile', icon: 'fa-id-badge' },
-                        { id: 'my-credentials', label: 'ID Card', icon: 'fa-address-card' },
-                        { id: 'my-achievements', label: 'Medals, Trophies & Achievements', icon: 'fa-medal' },
-                        { id: 'my-tournament-history', label: 'Tournament History', icon: 'fa-trophy' },
-                        { id: 'my-privacy-settings', label: 'Privacy', icon: 'fa-lock' }
-                    ]
-                });
             }
+
+            // "My Account" is for EVERYONE — Members and Admins alike each get their own
+            // Profile, ID Card, Achievements, Tournament History and Privacy.
+            groups.push({
+                id: 'account',
+                label: 'My Account',
+                icon: 'fa-user-gear',
+                color: '#34D399',
+                items: [
+                    { id: 'my-profile', label: 'Profile', icon: 'fa-id-badge' },
+                    { id: 'my-credentials', label: 'ID Card', icon: 'fa-address-card' },
+                    { id: 'my-achievements', label: 'Medals, Trophies & Achievements', icon: 'fa-medal' },
+                    { id: 'my-tournament-history', label: 'Tournament History', icon: 'fa-trophy' },
+                    { id: 'my-privacy-settings', label: 'Privacy', icon: 'fa-lock' }
+                ]
+            });
 
             return groups;
         }
@@ -4496,6 +4498,16 @@
             if (STATE.currentRole === 'member' && ADMIN_ONLY_VIEWS.includes(viewId)) {
                 viewId = 'my-profile';
                 STATE.currentView = 'my-profile';
+            }
+
+            // Admins have their own My Account pages too. The top-bar account switcher lets an
+            // Admin preview other members, so whenever they open one of their OWN account pages
+            // (Profile, ID Card, Tournament History, Privacy) snap back to their own record.
+            const OWN_ACCOUNT_VIEWS = ['my-profile', 'my-credentials', 'my-tournament-history', 'my-privacy-settings'];
+            if (STATE.currentRole === 'admin' && OWN_ACCOUNT_VIEWS.includes(viewId)
+                && STATE.auth.userId && STATE.activeUserId !== STATE.auth.userId) {
+                STATE.activeUserId = STATE.auth.userId;
+                populateUserSelector();
             }
 
             main.innerHTML = '';
