@@ -4223,18 +4223,6 @@
 
             const html = `
                 <div class="view-shell animate-rise">
-                    <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                        <div class="hero-figure"></div>
-                        <div class="flex items-start gap-4 min-w-0">
-                            <div class="hero-ico shrink-0"><i class="fa-solid fa-shield-heart"></i></div>
-                            <div class="min-w-0">
-                                <p class="eyebrow">Our Story</p>
-                                <h2 class="hero-title mt-1">About Empire Taekwondo Gym</h2>
-                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">A traditional Kukkiwon dojang for every age — from a child's first white belt class to a black belt Dan test — built on discipline, respect and self-belief.</p>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Club Photo Slideshow (5 slides) -->
                     <div class="glass-panel rounded-2xl border border-brand-border overflow-hidden">
                         <div class="relative w-full aspect-[16/9] sm:aspect-[21/9] bg-black overflow-hidden">
@@ -4260,6 +4248,18 @@
                                 </div>
                             `}
                             ${admin ? `<button onclick="openEditClubSlidesModal()" class="absolute top-3 right-3 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-black/50 hover:bg-black/70 text-white border border-white/20 flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit Photos</button>` : ''}
+                        </div>
+                    </div>
+
+                    <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                        <div class="hero-figure"></div>
+                        <div class="flex items-start gap-4 min-w-0">
+                            <div class="hero-ico shrink-0"><i class="fa-solid fa-shield-heart"></i></div>
+                            <div class="min-w-0">
+                                <p class="eyebrow">Our Story</p>
+                                <h2 class="hero-title mt-1">About Empire Taekwondo Gym</h2>
+                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">A traditional Kukkiwon dojang for every age — from a child's first white belt class to a black belt Dan test — built on discipline, respect and self-belief.</p>
+                            </div>
                         </div>
                     </div>
 
