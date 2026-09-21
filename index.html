@@ -4341,7 +4341,7 @@
                 case 'my-profile': renderMyProfileView(main); break;
                 case 'my-credentials': renderCredentialsView(main); break;
                 case 'my-checkins': renderMyCheckInsView(main); break;
-                case 'my-achievements': renderMyAchievementsView(main); break;
+                case 'my-achievements': renderAchievementsView(main); break;
                 case 'my-tournaments': renderMyTournamentsView(main); break;
                 case 'my-tournament-history': renderMyTournamentHistoryView(main); break;
                 case 'my-certificates': renderMyCertificatesView(main); break;
@@ -5679,7 +5679,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                         <div class="flex items-center gap-2 flex-wrap">
                             ${chip('all', 'All Members')}
                             ${canAttach ? chip('mine', 'My Certificates') : ''}
-                            ${isAdmin ? `<button type="button" onclick="openAttachCertificateModal()" class="px-3 py-1.5 text-[11px] font-bold rounded-xl bg-brand-red text-white hover:bg-brand-hover"><i class="fa-solid fa-plus mr-1"></i> Issue Certificate</button>` : ''}
+                            <button type="button" onclick="openAttachCertificateModal()" class="px-3 py-1.5 text-[11px] font-bold rounded-xl bg-brand-red text-white hover:bg-brand-hover"><i class="fa-solid fa-plus mr-1"></i> ${isAdmin ? 'Issue Certificate' : 'Add Certificate'}</button>
                         </div>
                         <input type="text" oninput="filterCertificateCards(this.value)" placeholder="Search title, member or tournament..." class="w-full md:w-72 bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-red">
                     </div>
@@ -6671,7 +6671,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                     <!-- Member Certificates (all attached files, together) -->
                     <div class="glass-panel rounded-2xl p-5 space-y-3">
                         <h3 class="section-heading flex items-center"><i class="fa-solid fa-certificate mr-2" style="color:var(--accent)"></i> Member Certificates</h3>
-                        ${renderCertificatesSection(STATE.members.find(m => m.id === STATE.activeUserId) || null, false)}
+                        ${renderCertificatesSection(STATE.members.find(m => m.id === STATE.activeUserId) || null, true)}
                     </div>
 
                     <!-- Medal Counters -->
@@ -8882,41 +8882,6 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             `;
             container.innerHTML = html;
         }
-        function renderMyAchievementsView(container) {
-            const user = STATE.members.find(m => m.id === STATE.activeUserId) || STATE.members[0];
-            const all = getVisibleCertificates(user);
-            const mine = all.filter(c => c.ownerId === user.id);
-            const owners = new Set(all.map(c => c.ownerId)).size;
-
-            const html = `
-                <div class="view-shell animate-rise">
-                    <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                        <div class="hero-figure"></div>
-                        <div class="flex items-start gap-4 min-w-0">
-                            <div class="hero-ico shrink-0"><i class="fa-solid fa-certificate"></i></div>
-                            <div class="min-w-0">
-                                <p class="eyebrow">My Record</p>
-                                <h2 class="hero-title mt-1">My Medals &amp; Awards</h2>
-                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">Add your medals and awards and your official Empire Taekwondo Gym certificate is created for you automatically — no picture needed. Certificates from every member are gathered here together.</p>
-                            </div>
-                        </div>
-                        <button onclick="openAttachCertificateModal()" class="px-4 py-2 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center shrink-0">
-                            <i class="fa-solid fa-plus mr-2"></i> Add Certificate
-                        </button>
-                    </div>
-
-                    <div class="grid grid-cols-3 gap-3 sm:gap-4">
-                        <div class="glass-panel p-4 rounded-2xl border border-brand-border text-center"><p class="text-[10px] font-bold uppercase text-gray-400">My Certificates</p><h3 class="text-xl font-black text-white mt-1">${mine.length}</h3></div>
-                        <div class="glass-panel p-4 rounded-2xl border border-brand-border text-center"><p class="text-[10px] font-bold uppercase text-gray-400">All Certificates</p><h3 class="text-xl font-black text-brand-red mt-1">${all.length}</h3></div>
-                        <div class="glass-panel p-4 rounded-2xl border border-brand-border text-center"><p class="text-[10px] font-bold uppercase text-gray-400">Members</p><h3 class="text-xl font-black text-white mt-1">${owners}</h3></div>
-                    </div>
-
-                    ${renderCertificatesSection(user, true)}
-                </div>
-            `;
-            container.innerHTML = html;
-        }
-
         function renderMyTournamentsView(container) {
             renderTournamentsView(container);
 
