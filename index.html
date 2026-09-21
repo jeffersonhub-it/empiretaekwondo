@@ -5217,7 +5217,21 @@
                     title: `${t.medal} Medalist${t.category ? ' — ' + t.category : ''}`,
                     tournament: t.name, category: t.classification || t.type || '', date: t.date, medal: t.medal
                 }));
-            return [...club, ...self].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+            self.forEach(t => seen.add(keyOf(t.tournament, t.medal)));
+            // Self-service "Add Certificate" entries (member.awardCertificates) also carry a
+            // Gold/Silver/Bronze level — these are medals too and belong in every medal count
+            // (profile cards, "My Profile" stats, and the club-wide Medals & Achievements page),
+            // not just in the Certificates gallery.
+            const certs = (member.awardCertificates || [])
+                .filter(c => ['Gold', 'Silver', 'Bronze'].includes(c.level) && !seen.has(keyOf(c.tournament, c.level)))
+                .map(c => ({
+                    source: 'certificate', id: c.id, type: 'Medal',
+                    title: c.title || `${c.level} Medal`,
+                    tournament: c.tournament || '', category: c.category || '', date: c.date || '',
+                    medal: c.level
+                }));
+            certs.forEach(c => seen.add(keyOf(c.tournament, c.medal)));
+            return [...club, ...self, ...certs].sort((a, b) => String(b.date).localeCompare(String(a.date)));
         }
 
         function countMedals(list) {
@@ -6613,10 +6627,14 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 return matchesSearch && matchesMedal && matchesCategory && matchesTournament && matchesYear;
             });
 
-            // Medal counters (computed from the full dataset, not just the filtered view)
-            const goldCount = STATE.achievements.filter(a => a.medal === 'Gold').length;
-            const silverCount = STATE.achievements.filter(a => a.medal === 'Silver').length;
-            const bronzeCount = STATE.achievements.filter(a => a.medal === 'Bronze').length;
+            // Medal counters (computed from the full club-wide dataset, not just the filtered
+            // view) — this combines club-logged achievements with each member's own medal-level
+            // certificates (getMemberMedalRecords already de-dupes overlaps per member), so a
+            // Gold/Silver/Bronze certificate a member added themselves counts here too.
+            const allMemberMedals = (STATE.members || []).filter(m => !m.archived).flatMap(m => getMemberMedalRecords(m));
+            const goldCount = allMemberMedals.filter(a => a.medal === 'Gold').length;
+            const silverCount = allMemberMedals.filter(a => a.medal === 'Silver').length;
+            const bronzeCount = allMemberMedals.filter(a => a.medal === 'Bronze').length;
             const totalCount = goldCount + silverCount + bronzeCount;
 
             const filtersActive = f.search || f.medal !== 'All' || f.category !== 'All' || f.tournament !== 'All' || f.year !== 'All';
