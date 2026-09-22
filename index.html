@@ -9250,6 +9250,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                                                 <span class="text-[10px] font-bold px-2 py-1 rounded-lg" style="${medalStyle(t.medal)}">${t.medal}</span>
                                             </td>
                                             <td class="px-4 py-3 text-right whitespace-nowrap">
+                                                <button onclick="openAddMyTournamentModal('${t.id || (user.id + '_th' + history.indexOf(t))}')" title="Edit" class="w-7 h-7 inline-flex items-center justify-center bg-brand-border hover:bg-gray-700 text-gray-200 text-xs rounded-lg transition-all mr-1.5"><i class="fa-solid fa-pen"></i></button>
                                                 <button onclick="deleteMyTournamentHistoryEntry('${t.id || (user.id + '_th' + history.indexOf(t))}')" title="Remove" class="w-7 h-7 inline-flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs rounded-lg transition-all"><i class="fa-solid fa-trash"></i></button>
                                             </td>
                                         </tr>
@@ -9265,7 +9266,14 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
         }
 
         // Same fields as the Tournament History step of Complete Your Member Profile.
-        function openAddMyTournamentModal() {
+        // Pass an entryId to edit an existing entry in place (e.g. to fix a typo/wrong medal)
+        // instead of adding a new one — a member can only ever edit their own entries, the
+        // same "own record only" boundary as the avatar/bio self-service edits.
+        function openAddMyTournamentModal(entryId) {
+            const user = STATE.members.find(m => m.id === STATE.activeUserId) || STATE.members[0];
+            const history = (user && Array.isArray(user.tournamentHistory)) ? user.tournamentHistory : [];
+            const existing = entryId ? history.find((t, i) => (t.id || `${user.id}_th${i}`) === entryId) : null;
+
             const inputClass = "w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-red";
             const typeOptions = ['International', 'National', 'Local'];
             const classificationOptions = ['Novice', 'Advance 1', 'Advance 2'];
@@ -9273,52 +9281,53 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const html = `
                 <div class="p-6 space-y-4">
                     <h3 class="text-lg font-extrabold text-white flex items-center">
-                        <i class="fa-solid fa-trophy text-brand-red mr-2"></i> Add Tournament
+                        <i class="fa-solid fa-trophy text-brand-red mr-2"></i> ${existing ? 'Edit Tournament' : 'Add Tournament'}
                     </h3>
                     <form id="addMyTournamentForm" onsubmit="handleAddMyTournamentSubmit(event)" class="space-y-3">
+                        <input type="hidden" id="mtEditId" value="${existing ? entryId : ''}">
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Tournament Name *</label>
-                            <input type="text" id="mtName" required class="${inputClass}">
+                            <input type="text" id="mtName" required value="${existing ? existing.name : ''}" class="${inputClass}">
                         </div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="text-[10px] font-bold text-gray-400 uppercase">Type *</label>
                                 <select id="mtType" required class="${inputClass}">
-                                    ${typeOptions.map(o => `<option value="${o}">${o}</option>`).join('')}
+                                    ${typeOptions.map(o => `<option value="${o}" ${existing && existing.type === o ? 'selected' : ''}>${o}</option>`).join('')}
                                 </select>
                             </div>
                             <div>
                                 <label class="text-[10px] font-bold text-gray-400 uppercase">Classification *</label>
                                 <select id="mtClassification" required class="${inputClass}">
-                                    ${classificationOptions.map(o => `<option value="${o}">${o}</option>`).join('')}
+                                    ${classificationOptions.map(o => `<option value="${o}" ${existing && existing.classification === o ? 'selected' : ''}>${o}</option>`).join('')}
                                 </select>
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="text-[10px] font-bold text-gray-400 uppercase">Category (Weight) *</label>
-                                <input type="text" id="mtCategory" required placeholder="e.g. -68kg Lightweight" class="${inputClass}">
+                                <input type="text" id="mtCategory" required value="${existing ? existing.category : ''}" placeholder="e.g. -68kg Lightweight" class="${inputClass}">
                             </div>
                             <div>
                                 <label class="text-[10px] font-bold text-gray-400 uppercase">Medal *</label>
                                 <select id="mtMedal" required class="${inputClass}">
-                                    ${medalOptions.map(o => `<option value="${o}">${o}</option>`).join('')}
+                                    ${medalOptions.map(o => `<option value="${o}" ${existing && existing.medal === o ? 'selected' : ''}>${o}</option>`).join('')}
                                 </select>
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="text-[10px] font-bold text-gray-400 uppercase">Date *</label>
-                                <input type="date" id="mtDate" required class="${inputClass}">
+                                <input type="date" id="mtDate" required value="${existing ? existing.date : ''}" class="${inputClass}">
                             </div>
                             <div>
                                 <label class="text-[10px] font-bold text-gray-400 uppercase">Venue *</label>
-                                <input type="text" id="mtVenue" required class="${inputClass}">
+                                <input type="text" id="mtVenue" required value="${existing ? existing.venue : ''}" class="${inputClass}">
                             </div>
                         </div>
                         <div class="flex justify-end gap-2 pt-2">
                             <button type="button" onclick="closeModal()" class="px-4 py-2 bg-brand-dark border border-brand-border text-white text-xs font-bold rounded-xl">Cancel</button>
-                            <button type="submit" class="px-4 py-2 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl">Save Tournament</button>
+                            <button type="submit" class="px-4 py-2 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl">${existing ? 'Save Changes' : 'Save Tournament'}</button>
                         </div>
                     </form>
                 </div>
@@ -9332,9 +9341,9 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             if (!user) return;
             if (!Array.isArray(user.tournamentHistory)) user.tournamentHistory = [];
 
+            const editId = document.getElementById('mtEditId').value;
             const name = document.getElementById('mtName').value.trim();
-            const entry = {
-                id: `${user.id}_t${Date.now()}`,
+            const fields = {
                 name,
                 type: document.getElementById('mtType').value,
                 category: document.getElementById('mtCategory').value.trim(),
@@ -9343,9 +9352,20 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 venue: document.getElementById('mtVenue').value.trim(),
                 medal: document.getElementById('mtMedal').value
             };
-            user.tournamentHistory.push(entry);
 
-            recordActivity('Added Tournament History', user, `${user.name} added "${name}" to their tournament history.`, user);
+            let actionLabel;
+            if (editId) {
+                const idx = user.tournamentHistory.findIndex((t, i) => (t.id || `${user.id}_th${i}`) === editId);
+                if (idx === -1) { closeModal(); return; }
+                user.tournamentHistory[idx] = { ...user.tournamentHistory[idx], ...fields };
+                recordActivity('Edited Tournament History', user, `${user.name} edited "${name}" in their tournament history.`, user);
+                actionLabel = 'updated';
+            } else {
+                const entry = { id: `${user.id}_t${Date.now()}`, ...fields };
+                user.tournamentHistory.push(entry);
+                recordActivity('Added Tournament History', user, `${user.name} added "${name}" to their tournament history.`, user);
+                actionLabel = 'added to';
+            }
 
             // Save straight to Firestore. If the save is rejected, tell the member instead of
             // silently losing the entry when the live member sync reloads the roster.
@@ -9355,7 +9375,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             closeModal();
             renderView(STATE.currentView);
             showToastNotification(saved
-                ? `"${name}" added to your tournament history.`
+                ? `"${name}" ${actionLabel} your tournament history.`
                 : `"${name}" could not be saved to the server — check your connection/permissions and try again.`);
         }
 
