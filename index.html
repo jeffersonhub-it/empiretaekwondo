@@ -62,7 +62,7 @@
         import {
             getAuth, onAuthStateChanged, signInWithEmailAndPassword,
             createUserWithEmailAndPassword, signOut, updatePassword,
-            sendPasswordResetEmail, setPersistence, browserLocalPersistence
+            sendPasswordResetEmail, setPersistence, browserSessionPersistence
         } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
         import {
             getFirestore, doc, getDoc, setDoc, onSnapshot
@@ -82,12 +82,17 @@
         const fbAuth = getAuth(fbApp);
         const fbDb = getFirestore(fbApp);
 
-        // Explicit LOCAL persistence: keeps the signed-in session (Admin or Member) in the
-        // browser's own storage across page refreshes and re-opening the tab/browser, so
-        // nobody — Admin included — gets logged out just from refreshing the page. bootApp's
-        // watchAuth check below then resumes straight back into the app on the next load.
-        setPersistence(fbAuth, browserLocalPersistence).catch(err => {
-            console.error('Could not set Firebase Auth persistence to LOCAL:', err);
+        // Explicit SESSION persistence: keeps the signed-in session (Admin or Member) alive
+        // across refreshes and reloads of THIS SAME TAB, but — unlike LOCAL persistence —
+        // never shares that session with other tabs/windows and clears it once the tab is
+        // closed. LOCAL persistence was tried first, but Firebase syncs a LOCAL session across
+        // every open tab of the same browser: a brand-new tab would silently inherit whoever
+        // was signed in elsewhere, and — worse — self-registration (createUserWithEmailAndPassword
+        // briefly signs the browser in as the new pending account before this file explicitly
+        // signs it back out) would momentarily bleed into every other open tab too. SESSION
+        // persistence gives each tab its own independent login, which fixes both.
+        setPersistence(fbAuth, browserSessionPersistence).catch(err => {
+            console.error('Could not set Firebase Auth persistence to SESSION:', err);
         });
 
         // Thin wrapper so the classic script below can call Firebase without needing
