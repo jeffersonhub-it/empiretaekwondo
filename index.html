@@ -8832,7 +8832,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const myCerts = STATE.certificates.filter(c => c.memberId === user.id);
             const myAch = getMemberMedalRecords(user);
             const myHistory = getMemberTournamentHistory(user);
-            const myTourCount = memberTournamentCount(user);
+            const myTourCount = myHistory.length;
             const myCheckIns = STATE.loginHistory.filter(h => h.userId === user.id);
             const nextBelt = getNextBelt(user.belt);
             const dp = user.directoryPrivacy || defaultDirectoryPrivacy();
