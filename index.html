@@ -1700,23 +1700,23 @@
         // ================= BELT & PROMOTION SYSTEM (Philippine-Style Progression) =================
         // Full color-belt sequence (Low ? High per color), followed by Black Belt Dan/Poom grades.
         const BELT_COLOR_SEQUENCE = [
-            { name: 'White Belt', code: 'white', emoji: '?' },
-            { name: 'Low Yellow Belt', code: 'yellow', emoji: '??' },
-            { name: 'High Yellow Belt', code: 'yellow', emoji: '??' },
-            { name: 'Low Green Belt', code: 'green', emoji: '??' },
-            { name: 'High Green Belt', code: 'green', emoji: '??' },
-            { name: 'Low Blue Belt', code: 'blue', emoji: '??' },
-            { name: 'High Blue Belt', code: 'blue', emoji: '??' },
-            { name: 'Low Brown Belt', code: 'brown', emoji: '??' },
-            { name: 'High Brown Belt', code: 'brown', emoji: '??' },
-            { name: 'Low Red Belt', code: 'red', emoji: '??' },
-            { name: 'High Red Belt', code: 'red', emoji: '??' }
+            { name: 'White Belt', code: 'white', emoji: '⚪' },
+            { name: 'Low Yellow Belt', code: 'yellow', emoji: '🟡' },
+            { name: 'High Yellow Belt', code: 'yellow', emoji: '🟡' },
+            { name: 'Low Green Belt', code: 'green', emoji: '🟢' },
+            { name: 'High Green Belt', code: 'green', emoji: '🟢' },
+            { name: 'Low Blue Belt', code: 'blue', emoji: '🔵' },
+            { name: 'High Blue Belt', code: 'blue', emoji: '🔵' },
+            { name: 'Low Brown Belt', code: 'brown', emoji: '🟤' },
+            { name: 'High Brown Belt', code: 'brown', emoji: '🟤' },
+            { name: 'Low Red Belt', code: 'red', emoji: '🔴' },
+            { name: 'High Red Belt', code: 'red', emoji: '🔴' }
         ];
         const DAN_ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
         const BELT_BLACK_SEQUENCE = DAN_ORDINALS.map((ord, i) => ({
             name: `Black Belt (${ord} Dan/Poom)`,
             code: 'black',
-            emoji: '?',
+            emoji: '⚫',
             dan: i + 1
         }));
         // The complete ordered belt roadmap, White Belt through 9th Dan/Poom Black Belt.
@@ -1771,8 +1771,8 @@
 
         // Emoji swatch for a belt color code — used in badges and lists.
         function beltEmoji(code) {
-            const map = { white: '?', yellow: '??', green: '??', blue: '??', brown: '??', red: '??', black: '?' };
-            return map[code] || '?';
+            const map = { white: '⚪', yellow: '🟡', green: '🟢', blue: '🔵', brown: '🟤', red: '🔴', black: '⚫' };
+            return map[code] || '⚪';
         }
 
         // ================= ROLE / PERMISSION STRUCTURE =================
@@ -4399,7 +4399,7 @@
 
         function toggleTheme() {
             setTheme(STATE.theme === 'light' ? 'dark' : 'light');
-            showToastNotification(STATE.theme === 'light' ? 'Light mode on ??' : 'Dark mode on ??');
+            showToastNotification(STATE.theme === 'light' ? 'Light mode on ☀️' : 'Dark mode on 🌙');
         }
 
         // Reuses the karate silhouette artwork already embedded in the auth screen so the
@@ -5213,13 +5213,13 @@
                         </div>
                         <select id="beltFilterSelect" onchange="filterMembersTable()" class="bg-brand-dark/80 border border-brand-border text-xs rounded-xl px-3 py-2.5 text-gray-300 focus:outline-none focus:border-brand-red">
                             <option value="">All Belt Ranks</option>
-                            <option value="white">? White Belt</option>
-                            <option value="yellow">?? Yellow Belt</option>
-                            <option value="green">?? Green Belt</option>
-                            <option value="blue">?? Blue Belt</option>
-                            <option value="brown">?? Brown Belt</option>
-                            <option value="red">?? Red Belt</option>
-                            <option value="black">? Black Belt</option>
+                            <option value="white">⚪ White Belt</option>
+                            <option value="yellow">🟡 Yellow Belt</option>
+                            <option value="green">🟢 Green Belt</option>
+                            <option value="blue">🔵 Blue Belt</option>
+                            <option value="brown">🟤 Brown Belt</option>
+                            <option value="red">🔴 Red Belt</option>
+                            <option value="black">⚫ Black Belt</option>
                         </select>
                         <select id="memberTypeFilterSelect" onchange="filterMembersTable()" class="bg-brand-dark/80 border border-brand-border text-xs rounded-xl px-3 py-2.5 text-gray-300 focus:outline-none focus:border-brand-red">
                             <option value="">All Member Types</option>
@@ -6633,7 +6633,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const accent = beltAccent(activeUser.beltCode);
             const isAdmin = STATE.currentRole === 'admin';
             const memberCerts = STATE.certificates.filter(c => c.memberId === activeUser.id);
-            const memberAch = STATE.achievements.filter(a => a.memberId === activeUser.id);
+            const memberMedals = getMemberMedalRecords(activeUser);
             const memberCheckIns = STATE.loginHistory.filter(h => h.userId === activeUser.id);
             const joinYear = activeUser.joinDate ? new Date(activeUser.joinDate).getFullYear() : '—';
 
@@ -6734,7 +6734,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
 
                             <div class="grid grid-cols-3 gap-3">
                                 ${statTile({ label: 'Certs', value: memberCerts.length, icon: 'fa-certificate', color: '#D4AF37' })}
-                                ${statTile({ label: 'Medals', value: memberAch.length, icon: 'fa-medal', color: '#F5A524' })}
+                                ${statTile({ label: 'Medals', value: memberMedals.length, icon: 'fa-medal', color: '#F5A524' })}
                                 ${statTile({ label: 'Visits', value: memberCheckIns.length, icon: 'fa-fingerprint', color: '#10B981' })}
                             </div>
 
@@ -6781,7 +6781,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                                     ${archived.length ? archived.map(m => {
                                         const accent = beltAccent(m.beltCode);
                                         const certs = STATE.certificates.filter(c => c.memberId === m.id).length;
-                                        const meds = STATE.achievements.filter(a => a.memberId === m.id).length;
+                                        const meds = getMemberMedalRecords(m).length;
                                         const chk = STATE.loginHistory.filter(h => h.userId === m.id).length;
                                         return `
                                         <tr>
@@ -6823,14 +6823,23 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const f = STATE.achievementFilters;
             const isAdmin = STATE.currentRole === 'admin';
 
-            // Build dropdown option sets from current achievement data
-            const tournamentNames = [...new Set(STATE.achievements.map(a => a.tournament))].sort();
-            const years = [...new Set(STATE.achievements.map(a => new Date(a.date).getFullYear()))].sort((a, b) => b - a);
+            // Combine club-logged achievements (STATE.achievements) with every member's
+            // self-reported medal-earning tournament history entries and self-added medal
+            // certificates, via getMemberMedalRecords() — so a medal a member registers
+            // themselves (My Tournament History / Add Certificate) shows up here too, not
+            // just in their own medal count.
+            const allRecords = (STATE.members || []).filter(m => !m.archived).flatMap(m =>
+                getMemberMedalRecords(m).map(r => ({ ...r, memberId: m.id, memberName: m.name }))
+            );
+
+            // Build dropdown option sets from the combined data
+            const tournamentNames = [...new Set(allRecords.map(a => a.tournament).filter(Boolean))].sort();
+            const years = [...new Set(allRecords.map(a => new Date(a.date).getFullYear()).filter(y => !isNaN(y)))].sort((a, b) => b - a);
 
             // Apply search + filters
-            const filtered = STATE.achievements.filter(ac => {
+            const filtered = allRecords.filter(ac => {
                 const q = f.search.trim().toLowerCase();
-                const matchesSearch = !q || ac.title.toLowerCase().includes(q) || ac.memberName.toLowerCase().includes(q) || ac.tournament.toLowerCase().includes(q);
+                const matchesSearch = !q || (ac.title || '').toLowerCase().includes(q) || (ac.memberName || '').toLowerCase().includes(q) || (ac.tournament || '').toLowerCase().includes(q);
                 const matchesMedal = f.medal === 'All' || ac.medal === f.medal;
                 const matchesCategory = f.category === 'All' || ac.category === f.category;
                 const matchesTournament = f.tournament === 'All' || ac.tournament === f.tournament;
@@ -6838,14 +6847,14 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 return matchesSearch && matchesMedal && matchesCategory && matchesTournament && matchesYear;
             });
 
-            // Medal counters (computed from the full club-wide dataset, not just the filtered
-            // view) — this combines club-logged achievements with each member's own medal-level
-            // certificates (getMemberMedalRecords already de-dupes overlaps per member), so a
-            // Gold/Silver/Bronze certificate a member added themselves counts here too.
-            const allMemberMedals = (STATE.members || []).filter(m => !m.archived).flatMap(m => getMemberMedalRecords(m));
-            const goldCount = allMemberMedals.filter(a => a.medal === 'Gold').length;
-            const silverCount = allMemberMedals.filter(a => a.medal === 'Silver').length;
-            const bronzeCount = allMemberMedals.filter(a => a.medal === 'Bronze').length;
+            // Medal counters (computed from the same combined club-wide dataset used above) —
+            // this combines club-logged achievements with each member's own medal-level
+            // certificates / self-reported tournament medals (getMemberMedalRecords already
+            // de-dupes overlaps per member), so a Gold/Silver/Bronze medal a member registers
+            // themselves counts here too.
+            const goldCount = allRecords.filter(a => a.medal === 'Gold').length;
+            const silverCount = allRecords.filter(a => a.medal === 'Silver').length;
+            const bronzeCount = allRecords.filter(a => a.medal === 'Bronze').length;
             const totalCount = goldCount + silverCount + bronzeCount;
 
             const filtersActive = f.search || f.medal !== 'All' || f.category !== 'All' || f.tournament !== 'All' || f.year !== 'All';
@@ -6915,9 +6924,9 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Medal</label>
                             <select onchange="updateAchievementFilter('medal', this.value)" class="bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 cursor-pointer">
                                 <option value="All" ${f.medal === 'All' ? 'selected' : ''}>All Medals</option>
-                                <option value="Gold" ${f.medal === 'Gold' ? 'selected' : ''}>?? Gold</option>
-                                <option value="Silver" ${f.medal === 'Silver' ? 'selected' : ''}>?? Silver</option>
-                                <option value="Bronze" ${f.medal === 'Bronze' ? 'selected' : ''}>?? Bronze</option>
+                                <option value="Gold" ${f.medal === 'Gold' ? 'selected' : ''}>🥇 Gold</option>
+                                <option value="Silver" ${f.medal === 'Silver' ? 'selected' : ''}>🥈 Silver</option>
+                                <option value="Bronze" ${f.medal === 'Bronze' ? 'selected' : ''}>🥉 Bronze</option>
                             </select>
                         </div>
                         <div>
@@ -6945,7 +6954,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                         ${filtersActive ? `<button onclick="resetAchievementFilters()" class="px-3 py-2 bg-brand-border text-gray-300 text-xs font-bold rounded-xl hover:bg-gray-700 transition-all">Clear Filters</button>` : ''}
                     </div>
 
-                    <p class="text-[11px] text-gray-500">Showing ${filtered.length} of ${STATE.achievements.length} record${STATE.achievements.length === 1 ? '' : 's'}</p>
+                    <p class="text-[11px] text-gray-500">Showing ${filtered.length} of ${allRecords.length} record${allRecords.length === 1 ? '' : 's'}</p>
 
                     <!-- Results Grid -->
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -6964,9 +6973,10 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                                     <div class="flex items-center gap-1.5 mt-2 flex-wrap">
                                         <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-brand-border text-gray-300">${ac.category}</span>
                                         <span class="px-2 py-0.5 rounded text-[9px] font-bold ${medalBadgeClass(ac.medal)}">${ac.medal}</span>
+                                        ${ac.source !== 'club' ? `<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-white/5 text-gray-400 border border-white/10">Self-reported</span>` : ''}
                                     </div>
                                 </div>
-                                ${isAdmin ? `
+                                ${isAdmin && ac.source === 'club' ? `
                                     <div class="flex items-center justify-end space-x-2 border-t border-brand-border/60 pt-3">
                                         <button onclick="openEditAchievementModal('${ac.id}')" class="px-3 py-1.5 bg-brand-border hover:bg-gray-700 text-gray-200 text-xs font-bold rounded-lg transition-all"><i class="fa-solid fa-pen mr-1"></i> Edit</button>
                                         <button onclick="deleteAchievement('${ac.id}')" class="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-lg transition-all"><i class="fa-solid fa-trash mr-1"></i> Delete</button>
@@ -7067,9 +7077,9 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                             <div>
                                 <label class="text-xs text-gray-400 font-bold">Medal</label>
                                 <select id="achMedal" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1">
-                                    <option value="Gold" ${existing && existing.medal === 'Gold' ? 'selected' : ''}>?? Gold</option>
-                                    <option value="Silver" ${existing && existing.medal === 'Silver' ? 'selected' : ''}>?? Silver</option>
-                                    <option value="Bronze" ${existing && existing.medal === 'Bronze' ? 'selected' : ''}>?? Bronze</option>
+                                    <option value="Gold" ${existing && existing.medal === 'Gold' ? 'selected' : ''}>🥇 Gold</option>
+                                    <option value="Silver" ${existing && existing.medal === 'Silver' ? 'selected' : ''}>🥈 Silver</option>
+                                    <option value="Bronze" ${existing && existing.medal === 'Bronze' ? 'selected' : ''}>🥉 Bronze</option>
                                 </select>
                             </div>
                         `}
@@ -8850,7 +8860,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                         icon: 'fa-id-badge',
                         eyebrow: 'My Credentials',
                         title: user.name,
-                        subtitle: `Welcome back! Here is your belt, your info and everything you have earned at Empire Taekwondo Gym. ??`,
+                        subtitle: `Welcome back! Here is your belt, your info and everything you have earned at Empire Taekwondo Gym. 🥋`,
                         chips: [
                             heroChip('Rank', user.belt, accent),
                             heroChip('Standing', user.status || 'Active', '#10B981'),
