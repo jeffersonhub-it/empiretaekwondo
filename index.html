@@ -2136,64 +2136,45 @@
             }
         }
 
-        // ================= REALTIME MEMBER SYNC (for pending-approval visibility) =================
-        // Without this, an Admin who is already signed in only ever sees the roster as of
-        // their last login/refresh — a new self-registration (or another Admin's approval)
-        // wouldn't show up until they reloaded the page. This subscribes to the "members"
-        // Firestore document live for the duration of the session, so new registrations,
-        // approvals, rejections, etc. appear immediately without any manual refresh.
-        let membersRealtimeUnsubscribe = null;
-        function startMembersRealtimeSync() {
-            if (membersRealtimeUnsubscribe) return;
-            try {
-                membersRealtimeUnsubscribe = window.fb.watchCollectionDoc('members', snap => {
-                    if (!snap || !snap.exists()) return;
-                    const data = snap.data();
-                    if (!data || !Array.isArray(data.items)) return;
-                    STATE.members = data.items;
-                    normalizeMemberRecords();
-                    populateUserSelector();
-                    renderSidebarNav();
-                    renderView(STATE.currentView);
-                });
-            } catch (err) {
-                console.error('Could not start realtime member sync:', err);
-            }
+        // ================= REALTIME CLUB DATA SYNC =================
+        // Every collection an Admin can add to that a signed-in Member should see live —
+        // Club News/Announcements, Medals & Achievements, Certificates, Promotions, the
+        // About/Club Profile page, plus the Members roster and Tournaments — is watched here
+        // for the whole session. New content an Admin adds (or edits/removes) shows up for
+        // every signed-in Member immediately, with no manual refresh or re-login needed.
+        const REALTIME_SYNC_KEYS = ['members', 'tournaments', 'announcements', 'achievements', 'certificates', 'promotions', 'clubProfile'];
+        let realtimeSyncUnsubscribes = {};
+        function startRealtimeSync() {
+            REALTIME_SYNC_KEYS.forEach(key => {
+                if (realtimeSyncUnsubscribes[key]) return;
+                try {
+                    realtimeSyncUnsubscribes[key] = window.fb.watchCollectionDoc(key, snap => {
+                        if (!snap || !snap.exists()) return;
+                        const data = snap.data();
+                        if (!data) return;
+                        if (key === 'clubProfile') {
+                            if (!data.profile) return;
+                            STATE.clubProfile = data.profile;
+                            ensureClubProfileDefaults();
+                        } else {
+                            if (!Array.isArray(data.items)) return;
+                            STATE[key] = data.items;
+                            if (key === 'members') normalizeMemberRecords();
+                        }
+                        if (key === 'members') populateUserSelector();
+                        renderSidebarNav();
+                        renderView(STATE.currentView);
+                    });
+                } catch (err) {
+                    console.error(`Could not start realtime sync for "${key}":`, err);
+                }
+            });
         }
-        function stopMembersRealtimeSync() {
-            if (membersRealtimeUnsubscribe) {
-                try { membersRealtimeUnsubscribe(); } catch (err) { /* ignore */ }
-                membersRealtimeUnsubscribe = null;
-            }
-        }
-
-        // ================= REALTIME TOURNAMENTS SYNC =================
-        // Only Admin can add/edit/delete tournaments (see the isAdmin checks in the
-        // Tournaments module), but every signed-in member should see a newly-added event
-        // show up in their own Tournaments / Upcoming Tournaments spotlight right away —
-        // without having to log out and back in. Mirrors startMembersRealtimeSync above,
-        // just watching the "tournaments" Firestore document instead of "members".
-        let tournamentsRealtimeUnsubscribe = null;
-        function startTournamentsRealtimeSync() {
-            if (tournamentsRealtimeUnsubscribe) return;
-            try {
-                tournamentsRealtimeUnsubscribe = window.fb.watchCollectionDoc('tournaments', snap => {
-                    if (!snap || !snap.exists()) return;
-                    const data = snap.data();
-                    if (!data || !Array.isArray(data.items)) return;
-                    STATE.tournaments = data.items;
-                    renderSidebarNav();
-                    renderView(STATE.currentView);
-                });
-            } catch (err) {
-                console.error('Could not start realtime tournaments sync:', err);
-            }
-        }
-        function stopTournamentsRealtimeSync() {
-            if (tournamentsRealtimeUnsubscribe) {
-                try { tournamentsRealtimeUnsubscribe(); } catch (err) { /* ignore */ }
-                tournamentsRealtimeUnsubscribe = null;
-            }
+        function stopRealtimeSync() {
+            Object.keys(realtimeSyncUnsubscribes).forEach(key => {
+                try { realtimeSyncUnsubscribes[key](); } catch (err) { /* ignore */ }
+            });
+            realtimeSyncUnsubscribes = {};
         }
 
         // Firebase Auth needs a real email. Every member record already has one (even the
@@ -3074,8 +3055,7 @@
             switchAuthTab('login');
 
             initApp();
-            startMembersRealtimeSync();
-            startTournamentsRealtimeSync();
+            startRealtimeSync();
 
             // First-login gate: a member whose profile has not been completed yet must
             // fill out the required Complete Member Profile form before doing anything else.
@@ -3613,8 +3593,7 @@
         async function handleLogout(skipConfirm) {
             if (skipConfirm !== true && !(await appConfirm('Are you sure you want to log out?'))) return;
 
-            stopMembersRealtimeSync();
-            stopTournamentsRealtimeSync();
+            stopRealtimeSync();
 
             const account = STATE.members.find(m => m.id === STATE.auth.userId);
             if (account) recordLogout(account);
