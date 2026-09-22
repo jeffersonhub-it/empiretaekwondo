@@ -1650,7 +1650,7 @@
 
                     <!-- Active account + quick actions -->
                     <div class="flex items-center gap-2 w-full lg:w-auto lg:pl-3 lg:border-l lg:border-white/20">
-                        <img id="activeAvatar" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150" alt="Avatar" class="w-9 h-9 rounded-full object-cover ring-2 ring-white/40 shrink-0">
+                        <img id="activeAvatar" src="" alt="Avatar" class="w-9 h-9 rounded-full object-cover ring-2 ring-white/40 shrink-0">
                         <div class="truncate lg:hidden 2xl:block 2xl:max-w-[150px]">
                             <p id="activeName" class="text-[11px] font-bold text-white truncate">—</p>
                             <p id="activeRoleSub" class="text-[9px] text-white/70 truncate">—</p>
@@ -1721,6 +1721,22 @@
         }));
         // The complete ordered belt roadmap, White Belt through 9th Dan/Poom Black Belt.
         const BELT_RANKS = [...BELT_COLOR_SEQUENCE, ...BELT_BLACK_SEQUENCE];
+
+        // ================= DEFAULT PROFILE PHOTO (no-face silhouette placeholder) =================
+        // Anyone with no profile photo attached falls back to this same plain "no face"
+        // silhouette icon, everywhere an avatar is shown in the app (instead of a stock photo).
+        const DEFAULT_AVATAR = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+            '<rect width="100" height="100" fill="#1C1C23"/>' +
+            '<circle cx="50" cy="38" r="18" fill="#4B4B58"/>' +
+            '<path d="M50 60c-24 0-38 14-38 32v8h76v-8c0-18-14-32-38-32z" fill="#4B4B58"/>' +
+            '</svg>'
+        );
+        // Every avatar <img> in the app resolves through this: use the member's own photo
+        // if they have one, otherwise the shared silhouette above.
+        function avatarSrc(url) {
+            return (url && String(url).trim()) ? url : DEFAULT_AVATAR;
+        }
 
         // Determine a belt's color "code" (used for badges, filters, chart colors) from its display name.
         function getBeltCode(beltName) {
@@ -2230,7 +2246,7 @@
                 weightClass: 'Not Assigned',
                 joinDate: new Date().toISOString().split('T')[0],
                 status: 'Active',
-                avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
+                avatar: '',
                 medical: 'None',
                 emergencyContact: 'Not Provided',
                 bio: '',
@@ -2953,7 +2969,7 @@
                 weightClass: 'Not Assigned',
                 joinDate: new Date().toISOString().split('T')[0],
                 status: 'Active',
-                avatar: regAvatarDataUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
+                avatar: regAvatarDataUrl || '',
                 medical: 'None',
                 emergencyContact: 'Not Provided',
                 bio: '',
@@ -3266,7 +3282,7 @@
                 <div class="p-6 space-y-6">
                     <!-- No close/X button by design — this step is required before the member can proceed -->
                     <div class="flex items-start gap-4 border-b border-brand-border pb-4">
-                        <img id="completeProfileAvatarPreview" src="${member.avatar}" class="w-16 h-16 rounded-2xl object-cover border-2 border-brand-red shadow-lg shrink-0">
+                        <img id="completeProfileAvatarPreview" src="${avatarSrc(member.avatar)}" class="w-16 h-16 rounded-2xl object-cover border-2 border-brand-red shadow-lg shrink-0">
                         <div>
                             <h3 class="text-lg font-extrabold text-white flex items-center">
                                 <i class="fa-solid fa-clipboard-user text-brand-red mr-2"></i> Complete Your Member Profile
@@ -3842,7 +3858,7 @@
         function updateActiveUserBadge() {
             const user = STATE.members.find(m => m.id === STATE.activeUserId);
             if (!user) return;
-            document.getElementById('activeAvatar').src = user.avatar;
+            document.getElementById('activeAvatar').src = avatarSrc(user.avatar);
             document.getElementById('activeName').textContent = user.name;
             document.getElementById('activeRoleSub').textContent = `${user.role} - ${user.belt}`;
         }
@@ -4656,7 +4672,7 @@
                             <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-user-graduate" style="color:var(--accent)"></i> Head Instructor</h3>
                             ${head ? `
                                 <div class="flex items-center gap-3">
-                                    <img src="${head.avatar}" class="w-12 h-12 rounded-xl object-cover border border-brand-border">
+                                    <img src="${avatarSrc(head.avatar)}" class="w-12 h-12 rounded-xl object-cover border border-brand-border">
                                     <div class="min-w-0">
                                         <p class="text-xs font-bold text-white truncate">${head.name}</p>
                                         <p class="text-[10px] text-gray-400">${head.role || head.belt}</p>
@@ -5268,7 +5284,7 @@
 
                     <div class="relative z-10">
                         ${v('photo') ? `
-                            <img src="${m.avatar}" class="w-20 h-20 rounded-2xl object-cover shadow-xl" style="border:2px solid ${accent}">
+                            <img src="${avatarSrc(m.avatar)}" class="w-20 h-20 rounded-2xl object-cover shadow-xl" style="border:2px solid ${accent}">
                         ` : `
                             <div class="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-600"><i class="fa-solid fa-lock text-lg"></i></div>
                         `}
@@ -5907,7 +5923,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                     <div class="flex flex-col md:flex-row items-center md:items-start gap-4 border-b border-brand-border pb-4">
                         <div class="flex items-center space-x-4 flex-1">
                             ${v('photo') ? `
-                                <img src="${member.avatar}" class="w-16 h-16 rounded-2xl object-cover border-2 border-brand-red shadow-lg">
+                                <img src="${avatarSrc(member.avatar)}" class="w-16 h-16 rounded-2xl object-cover border-2 border-brand-red shadow-lg">
                             ` : `
                                 <div class="w-16 h-16 rounded-2xl bg-brand-dark border border-brand-border flex items-center justify-center text-gray-500 shrink-0">
                                     <i class="fa-solid fa-lock text-lg"></i>
@@ -6023,7 +6039,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-brand-border pb-4">
                         <div class="flex items-center space-x-4">
                             <div class="relative group">
-                                <img id="editAvatarPreview" src="${member.avatar}" class="w-16 h-16 rounded-2xl object-cover border-2 border-brand-red shadow-lg">
+                                <img id="editAvatarPreview" src="${avatarSrc(member.avatar)}" class="w-16 h-16 rounded-2xl object-cover border-2 border-brand-red shadow-lg">
                                 ${isAdmin ? `
                                     <button onclick="promptChangeAvatar()" class="absolute inset-0 bg-black/60 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold">
                                         <i class="fa-solid fa-camera"></i>
@@ -6657,7 +6673,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                                 </div>
 
                                 <div class="flex items-center gap-5">
-                                    <img src="${activeUser.avatar}" class="w-24 h-24 rounded-2xl object-cover shadow-2xl shrink-0" style="border:2px solid ${accent}">
+                                    <img src="${avatarSrc(activeUser.avatar)}" class="w-24 h-24 rounded-2xl object-cover shadow-2xl shrink-0" style="border:2px solid ${accent}">
                                     <div class="min-w-0">
                                         <p class="eyebrow">Practitioner</p>
                                         <h3 class="font-display text-lg font-extrabold text-white truncate">${activeUser.name}</h3>
@@ -6771,7 +6787,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                                         <tr>
                                             <td class="py-3 px-4">
                                                 <div class="flex items-center gap-3">
-                                                    <img src="${m.avatar}" class="w-9 h-9 rounded-xl object-cover grayscale opacity-70" style="border:1px solid ${accent}55">
+                                                    <img src="${avatarSrc(m.avatar)}" class="w-9 h-9 rounded-xl object-cover grayscale opacity-70" style="border:1px solid ${accent}55">
                                                     <div>
                                                         <p class="font-bold text-white">${m.name}</p>
                                                         <p class="text-[10px] text-gray-500 mono">${m.id.toUpperCase()}-2026</p>
@@ -8856,12 +8872,16 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                         <div class="glass-panel rounded-2xl p-6 flex flex-col items-center text-center relative overflow-hidden">
                             <div class="absolute inset-x-0 top-0 h-32 opacity-50" style="background:radial-gradient(90% 120% at 50% 0%, ${accent}40 0%, transparent 70%)"></div>
                             <div class="relative z-10 group">
-                                <img src="${user.avatar}" class="w-28 h-28 rounded-3xl object-cover shadow-2xl" style="border:2px solid ${accent}">
-                                <button onclick="promptChangeMyAvatar()" title="Change photo" class="absolute inset-0 bg-black/60 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold">
+                                <img src="${avatarSrc(user.avatar)}" class="w-28 h-28 rounded-3xl object-cover shadow-2xl" style="border:2px solid ${accent}">
+                                <button onclick="openMyAvatarFilePicker()" title="Add / change photo" class="absolute inset-0 bg-black/60 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold">
                                     <i class="fa-solid fa-camera"></i>
                                 </button>
                             </div>
-                            <button onclick="promptChangeMyAvatar()" class="text-[10px] text-gray-500 hover:text-white mt-1.5 relative z-10"><i class="fa-solid fa-camera mr-1"></i> Change photo</button>
+                            <input type="file" id="myAvatarFile" accept="image/*" onchange="handleMyAvatarFileChange(event)" class="hidden">
+                            <div class="flex items-center gap-3 mt-1.5 relative z-10">
+                                <button onclick="openMyAvatarFilePicker()" class="text-[10px] text-gray-500 hover:text-white"><i class="fa-solid fa-upload mr-1"></i> ${user.avatar ? 'Change photo' : 'Add photo'}</button>
+                                ${user.avatar ? `<button onclick="removeMyAvatar()" class="text-[10px] text-gray-500 hover:text-brand-red"><i class="fa-solid fa-trash-can mr-1"></i> Remove photo</button>` : ''}
+                            </div>
                             <h3 class="font-display text-lg font-extrabold text-white mt-2 relative z-10">${user.name}</h3>
                             <p class="text-[11px] text-gray-400">${user.role}</p>
                             <div class="w-full mt-4 relative z-10">
@@ -8996,16 +9016,49 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
         // Self-service avatar change — a member may only ever change their OWN photo here
         // (STATE.activeUserId), never another member's. Admin still has its own separate
         // promptChangeAvatar() inside the member editor for managing anyone's record.
-        async function promptChangeMyAvatar() {
+        // Photo is attached from the device (file browse) rather than typed in as a URL —
+        // opens the hidden <input type="file"> on the My Profile identity card.
+        function openMyAvatarFilePicker() {
+            const fileInput = document.getElementById('myAvatarFile');
+            if (fileInput) fileInput.click();
+        }
+        // Reads the chosen photo into a base64 data URL (same pattern used for the
+        // registration avatar / certificate / announcement uploads elsewhere in this file)
+        // and saves it as the signed-in member's own profile photo.
+        function handleMyAvatarFileChange(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+                showToastNotification('Please choose an image file.', 'error');
+                e.target.value = '';
+                return;
+            }
             const user = STATE.members.find(m => m.id === STATE.activeUserId);
             if (!user) return;
-            const url = await appPrompt('Enter a new profile photo URL:', user.avatar || '');
-            if (!url || !url.trim()) return;
-            user.avatar = url.trim();
-            recordActivity('Updated Profile Photo', user, `${user.name} updated their own profile photo.`, user);
+            const reader = new FileReader();
+            reader.onload = evt => {
+                user.avatar = evt.target.result;
+                recordActivity('Updated Profile Photo', user, `${user.name} updated their own profile photo.`, user);
+                persistCollection('members');
+                populateUserSelector();
+                showToastNotification('Your profile photo has been updated!');
+                renderView('my-profile');
+            };
+            reader.readAsDataURL(file);
+            e.target.value = '';
+        }
+        // Removes the signed-in member's own profile photo — falls back to the default
+        // no-face silhouette icon everywhere their avatar is shown.
+        async function removeMyAvatar() {
+            const user = STATE.members.find(m => m.id === STATE.activeUserId);
+            if (!user || !user.avatar) return;
+            const ok = await appConfirm('Remove your profile photo? You will show up with the default icon until you add a new one.');
+            if (!ok) return;
+            user.avatar = '';
+            recordActivity('Updated Profile Photo', user, `${user.name} removed their own profile photo.`, user);
             persistCollection('members');
             populateUserSelector();
-            showToastNotification('Your profile photo has been updated!');
+            showToastNotification('Your profile photo has been removed.');
             renderView('my-profile');
         }
         // Self-service bio edit — same "own record only" boundary as the avatar change above.
@@ -9504,7 +9557,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 weightClass: 'Not Assigned',
                 joinDate: new Date().toISOString().split('T')[0],
                 status: 'Active',
-                avatar: avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=150',
+                avatar: avatarUrl || '',
                 medical: 'None',
                 emergencyContact: 'Emergency Contact (+63 922 000 0000)',
                 directoryPrivacy: defaultDirectoryPrivacy(),
