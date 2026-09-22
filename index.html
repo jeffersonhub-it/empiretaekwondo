@@ -9700,6 +9700,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             populateUserSelector();
             renderSidebarNav();
             renderView(STATE.currentView);
+            persistCollection('members');
             showToastNotification(`${member.name} has been archived.`);
         }
 
@@ -9716,6 +9717,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             populateUserSelector();
             renderSidebarNav();
             renderView(STATE.currentView);
+            persistCollection('members');
             showToastNotification(`${member.name} has been restored to the roster.`);
         }
 
@@ -9731,7 +9733,13 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             populateUserSelector();
             renderSidebarNav();
             renderView(STATE.currentView);
-            showToastNotification('Member record permanently deleted.');
+
+            let saved = true;
+            try { await persistCollectionStrict('members'); } catch (err) { saved = false; console.error('Permanent delete save failed:', err); }
+
+            showToastNotification(saved
+                ? 'Member record permanently deleted.'
+                : 'Removed locally, but could not confirm the delete was saved to the server — check your connection/permissions.');
         }
 
         // Kept for compatibility: removing a member from the roster now archives them.
