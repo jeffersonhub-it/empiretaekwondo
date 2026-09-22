@@ -8918,7 +8918,10 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                                     </h3>
                                     <p class="text-[11px] text-gray-500 mt-1">Only you and club administrators can see these details. Tap the eye icon to reveal a value.</p>
                                 </div>
-                                <span class="chip"><i class="fa-solid fa-lock text-[9px]"></i> Confidential</span>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="chip"><i class="fa-solid fa-lock text-[9px]"></i> Confidential</span>
+                                    <button onclick="openEditMyPrivateInfoModal()" class="btn-ghost px-3 py-1.5 text-[10px] font-bold rounded-xl flex items-center"><i class="fa-solid fa-pen mr-1.5"></i> Edit</button>
+                                </div>
                             </div>
 
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 mt-3">
@@ -9058,6 +9061,89 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
         // Self-service bio edit — same "own record only" boundary as the avatar change above.
         // Every other field on a member's record (contact info, credentials, memberType,
         // status) remains Admin-managed, per the app's existing permission model.
+        // Self-service edit for the "Private Member Information" card (contact details,
+        // DOB, emergency contact, medical notes) — same "own record only" boundary as the
+        // bio/avatar self-edits above. Login Username is intentionally left out here since
+        // changing it would break sign-in; that stays Admin-managed.
+        function openEditMyPrivateInfoModal() {
+            const user = STATE.members.find(m => m.id === STATE.activeUserId);
+            if (!user) return;
+            const inputClass = "w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-red";
+            const html = `
+                <div class="p-6 space-y-4">
+                    <h3 class="text-lg font-extrabold text-white flex items-center">
+                        <i class="fa-solid fa-user-shield text-brand-red mr-2"></i> Edit Private Information
+                    </h3>
+                    <p class="text-[11px] text-gray-500 -mt-2">Only you and club administrators can see these details.</p>
+                    <form id="editMyPrivateInfoForm" onsubmit="handleSaveMyPrivateInfo(event)" class="space-y-3">
+                        <div>
+                            <label class="text-[10px] font-bold text-gray-400 uppercase">Email Address *</label>
+                            <input type="email" id="piEmail" required value="${escHtml(user.email || '')}" class="${inputClass}">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-400 uppercase">Phone Number</label>
+                                <input type="text" id="piPhone" value="${escHtml(user.phone || '')}" class="${inputClass}">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-400 uppercase">Date of Birth</label>
+                                <input type="date" id="piDob" value="${escHtml(user.dob || '')}" class="${inputClass}">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-gray-400 uppercase">Home Address</label>
+                            <input type="text" id="piAddress" value="${escHtml(user.address || '')}" class="${inputClass}">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-400 uppercase">Emergency Contact Name</label>
+                                <input type="text" id="piEmergencyName" value="${escHtml(user.emergencyContactName || '')}" class="${inputClass}">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-400 uppercase">Emergency Contact Phone</label>
+                                <input type="text" id="piEmergencyPhone" value="${escHtml(user.emergencyPhone || '')}" class="${inputClass}">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-gray-400 uppercase">Medical Notes</label>
+                            <textarea id="piMedical" rows="2" class="${inputClass}">${escHtml(user.medical || '')}</textarea>
+                        </div>
+                        <div class="flex justify-end gap-2 pt-2">
+                            <button type="button" onclick="closeModal()" class="px-4 py-2 bg-brand-dark border border-brand-border text-white text-xs font-bold rounded-xl">Cancel</button>
+                            <button type="submit" class="px-4 py-2 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            openModal(html);
+        }
+
+        async function handleSaveMyPrivateInfo(e) {
+            e.preventDefault();
+            const user = STATE.members.find(m => m.id === STATE.activeUserId);
+            if (!user) return;
+
+            user.email = document.getElementById('piEmail').value.trim();
+            user.phone = document.getElementById('piPhone').value.trim();
+            user.dob = document.getElementById('piDob').value;
+            user.address = document.getElementById('piAddress').value.trim();
+            user.emergencyContactName = document.getElementById('piEmergencyName').value.trim();
+            user.emergencyPhone = document.getElementById('piEmergencyPhone').value.trim();
+            user.emergencyContact = ''; // superseded by the name/phone pair entered above
+            user.medical = document.getElementById('piMedical').value.trim();
+
+            recordActivity('Updated Private Information', user, `${user.name} updated their private member information.`, user);
+
+            let saved = true;
+            try { await persistCollectionStrict('members'); } catch (err) { saved = false; console.error('Private info save failed:', err); }
+
+            closeModal();
+            renderView('my-profile');
+            showToastNotification(saved
+                ? 'Your private information has been updated!'
+                : 'Could not be saved to the server — check your connection/permissions and try again.');
+        }
+
         function saveMyBio() {
             const user = STATE.members.find(m => m.id === STATE.activeUserId);
             if (!user) return;
