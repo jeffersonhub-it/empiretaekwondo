@@ -3986,11 +3986,7 @@
                         { id: 'achievements', label: 'Medals', icon: 'fa-trophy' },
                         { id: 'tournaments', label: 'Tournaments', icon: 'fa-fire' },
                         { id: 'archive', label: 'Archive', icon: 'fa-box-archive', badge: archivedMembers().length },
-                        { id: 'club-history', label: 'History', icon: 'fa-clock-rotate-left' },
-                        { id: 'club-who-we-are', label: 'Who We Are', icon: 'fa-shield-heart' },
-                        { id: 'club-mission', label: 'Mission', icon: 'fa-flag' },
-                        { id: 'club-vision', label: 'Vision', icon: 'fa-eye' },
-                        { id: 'club-contact', label: 'Contact Info', icon: 'fa-location-dot' },
+                        { id: 'club-content', label: 'About Page Content', icon: 'fa-file-lines' },
                         { id: 'privacy-settings', label: 'Privacy', icon: 'fa-lock' },
                         { id: 'activity-log', label: 'Activity Log', icon: 'fa-file-pen', badge: STATE.activityLog.length }
                     ]
@@ -4431,11 +4427,7 @@
             'my-announcements':     '#3B82F6',
             'login-history':        '#10B981',
             'activity-log':         '#8B5CF6',
-            'club-history':         '#64748B',
-            'club-who-we-are':      '#64748B',
-            'club-mission':         '#64748B',
-            'club-vision':          '#64748B',
-            'club-contact':         '#64748B',
+            'club-content':         '#64748B',
             'privacy-settings':     '#64748B',
             'my-privacy-settings':  '#64748B',
             'my-profile':           '#E60023',
@@ -4591,7 +4583,7 @@
         }
 
 
-        const ADMIN_ONLY_VIEWS = ['credentials', 'archive', 'achievements', 'tournaments', 'certificates', 'announcements', 'club-history', 'club-who-we-are', 'club-mission', 'club-vision', 'club-contact', 'privacy-settings', 'login-history', 'activity-log'];
+        const ADMIN_ONLY_VIEWS = ['credentials', 'archive', 'achievements', 'tournaments', 'certificates', 'announcements', 'club-content', 'privacy-settings', 'login-history', 'activity-log'];
 
         function renderView(viewId) {
             const main = document.getElementById('mainViewport');
@@ -4632,11 +4624,7 @@
                 case 'tournaments': renderTournamentsView(main); break;
                 case 'certificates': renderCertificatesView(main); break;
                 case 'announcements': renderAnnouncementsView(main); break;
-                case 'club-history': renderClubHistoryView(main); break;
-                case 'club-who-we-are': renderClubWhoWeAreView(main); break;
-                case 'club-mission': renderClubMissionView(main); break;
-                case 'club-vision': renderClubVisionView(main); break;
-                case 'club-contact': renderClubContactView(main); break;
+                case 'club-content': renderClubContentView(main); break;
                 case 'privacy-settings': renderPrivacySettingsView(main); break;
                 case 'login-history': renderLoginHistoryView(main); break;
                 case 'activity-log': renderActivityLogView(main); break;
@@ -4824,7 +4812,7 @@
             const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             cp.description = (document.getElementById('cpDescription').value || '').trim();
             recordActivity('Updated Club Profile', null, 'Admin updated the About page "Who We Are" description.');
-            finishClubProfileSave('Description updated', 'club-who-we-are');
+            finishClubProfileSave('Description updated', 'club-content');
         }
 
         // Edited from the Admin Panel's own "History" section only — this is the single
@@ -4846,7 +4834,7 @@
             const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             cp.history = (document.getElementById('cpHistory').value || '').trim();
             recordActivity('Updated Club Profile', null, 'Admin updated Our Story / Our History from the Admin Panel.');
-            finishClubProfileSave('History updated — it will now show on the Login page.', 'club-history');
+            finishClubProfileSave('History updated — it will now show on the Login page.', 'club-content');
         }
 
         function openEditClubMissionModal() {
@@ -4864,7 +4852,7 @@
             const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             cp.mission = (document.getElementById('cpMission').value || '').trim();
             recordActivity('Updated Club Profile', null, 'Admin updated the About page mission statement.');
-            finishClubProfileSave('Mission updated', 'club-mission');
+            finishClubProfileSave('Mission updated', 'club-content');
         }
 
         function openEditClubVisionModal() {
@@ -4882,7 +4870,7 @@
             const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             cp.vision = (document.getElementById('cpVision').value || '').trim();
             recordActivity('Updated Club Profile', null, 'Admin updated the About page vision statement.');
-            finishClubProfileSave('Vision updated', 'club-vision');
+            finishClubProfileSave('Vision updated', 'club-content');
         }
 
         function openEditClubContactModal() {
@@ -4926,7 +4914,7 @@
                 instagram: (document.getElementById('cpInstagram').value || '').trim()
             };
             recordActivity('Updated Club Profile', null, 'Admin updated the About page contact info.');
-            finishClubProfileSave('Contact info updated', 'club-contact');
+            finishClubProfileSave('Contact info updated', 'club-content');
         }
 
         function openEditClubSlidesModal() {
@@ -8539,121 +8527,16 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             renderView(STATE.currentView);
         }
 
-        // ================= ADMIN: OUR STORY / OUR HISTORY (own Admin Panel section) =================
-        // This is the single edit entry point for clubProfile.history — the same field the
-        // First/Login page reads via renderAuthClubInfo(), so saving here updates the Login page
-        // automatically. Kept as its own nav item/section (not folded into Privacy Settings).
-        function renderClubHistoryView(container) {
+        // ================= ADMIN: ABOUT PAGE CONTENT (single combined Admin Panel section) =================
+        // History, Who We Are, Mission, Vision and Contact Info are all edited from this one
+        // panel to keep the Admin nav uncluttered. Each field still writes to the matching
+        // clubProfile.* field the First/Login page already reads via renderAuthClubInfo(), so
+        // saving here updates the Login page automatically. Each has its own single Edit entry
+        // point (openEditClubHistoryModal, openEditClubDescriptionModal, openEditClubMissionModal,
+        // openEditClubVisionModal, openEditClubContactModal) — no duplicate edit controls elsewhere.
+        function renderClubContentView(container) {
             const cp = STATE.clubProfile || {};
-            const html = `
-                <div class="view-shell animate-rise">
-                    <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                        <div class="hero-figure"></div>
-                        <div class="flex items-start gap-4 min-w-0">
-                            <div class="hero-ico shrink-0"><i class="fa-solid fa-clock-rotate-left"></i></div>
-                            <div class="min-w-0">
-                                <p class="eyebrow">Admin Panel</p>
-                                <h2 class="hero-title mt-1">Our Story / Our History</h2>
-                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">This text is shown to everyone on the First / Login page, before they sign in. Save your changes here and they'll appear there automatically.</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="glass-panel p-6 rounded-2xl border border-brand-border space-y-4">
-                        <div class="flex items-center justify-between gap-3 border-b border-brand-border/60 pb-3">
-                            <h3 class="text-sm font-bold text-white uppercase tracking-wider">History</h3>
-                            <button onclick="openEditClubHistoryModal()" class="shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
-                        </div>
-                        <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.history || 'No history written yet — click "Edit" to add it.'}</p>
-                    </div>
-                </div>
-            `;
-            container.innerHTML = html;
-        }
-
-        // ================= ADMIN: WHO WE ARE / MISSION / VISION / CONTACT (own Admin Panel sections) =================
-        // Each writes to the matching clubProfile field the First/Login page already reads via
-        // renderAuthClubInfo(), so saving here updates the Login page automatically.
-        function renderClubWhoWeAreView(container) {
-            const cp = STATE.clubProfile || {};
-            container.innerHTML = `
-                <div class="view-shell animate-rise">
-                    <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                        <div class="hero-figure"></div>
-                        <div class="flex items-start gap-4 min-w-0">
-                            <div class="hero-ico shrink-0"><i class="fa-solid fa-shield-heart"></i></div>
-                            <div class="min-w-0">
-                                <p class="eyebrow">Admin Panel</p>
-                                <h2 class="hero-title mt-1">Who We Are</h2>
-                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">Shown on the First / Login page's "Who We Are" panel, before anyone signs in.</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="glass-panel p-6 rounded-2xl border border-brand-border space-y-4">
-                        <div class="flex items-center justify-between gap-3 border-b border-brand-border/60 pb-3">
-                            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Description</h3>
-                            <button onclick="openEditClubDescriptionModal()" class="shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
-                        </div>
-                        <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.description || 'No description yet — click "Edit" to add one.'}</p>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderClubMissionView(container) {
-            const cp = STATE.clubProfile || {};
-            container.innerHTML = `
-                <div class="view-shell animate-rise">
-                    <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                        <div class="hero-figure"></div>
-                        <div class="flex items-start gap-4 min-w-0">
-                            <div class="hero-ico shrink-0"><i class="fa-solid fa-flag"></i></div>
-                            <div class="min-w-0">
-                                <p class="eyebrow">Admin Panel</p>
-                                <h2 class="hero-title mt-1">Our Mission</h2>
-                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">Shown on the First / Login page, before anyone signs in.</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="glass-panel p-6 rounded-2xl border border-brand-border space-y-4">
-                        <div class="flex items-center justify-between gap-3 border-b border-brand-border/60 pb-3">
-                            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Mission</h3>
-                            <button onclick="openEditClubMissionModal()" class="shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
-                        </div>
-                        <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.mission || 'No mission statement yet — click "Edit" to add one.'}</p>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderClubVisionView(container) {
-            const cp = STATE.clubProfile || {};
-            container.innerHTML = `
-                <div class="view-shell animate-rise">
-                    <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                        <div class="hero-figure"></div>
-                        <div class="flex items-start gap-4 min-w-0">
-                            <div class="hero-ico shrink-0"><i class="fa-solid fa-eye"></i></div>
-                            <div class="min-w-0">
-                                <p class="eyebrow">Admin Panel</p>
-                                <h2 class="hero-title mt-1">Our Vision</h2>
-                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">Shown on the First / Login page, before anyone signs in.</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="glass-panel p-6 rounded-2xl border border-brand-border space-y-4">
-                        <div class="flex items-center justify-between gap-3 border-b border-brand-border/60 pb-3">
-                            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Vision</h3>
-                            <button onclick="openEditClubVisionModal()" class="shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
-                        </div>
-                        <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.vision || 'No vision statement yet — click "Edit" to add one.'}</p>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderClubContactView(container) {
-            const c = (STATE.clubProfile && STATE.clubProfile.contact) || {};
+            const c = cp.contact || {};
             const rows = [
                 c.address ? `<p class="text-xs text-gray-300"><i class="fa-solid fa-location-dot mr-1.5" style="color:var(--accent)"></i>${c.address}</p>` : '',
                 c.phone ? `<p class="text-xs text-gray-300"><i class="fa-solid fa-phone mr-1.5" style="color:var(--accent)"></i>${c.phone}</p>` : '',
@@ -8661,31 +8544,47 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 c.facebook ? `<p class="text-xs text-gray-300"><i class="fa-brands fa-facebook mr-1.5" style="color:var(--accent)"></i>${c.facebook}</p>` : '',
                 c.instagram ? `<p class="text-xs text-gray-300"><i class="fa-brands fa-instagram mr-1.5" style="color:var(--accent)"></i>${c.instagram}</p>` : ''
             ].filter(Boolean).join('');
-            const body = rows ? `<div class="space-y-1.5">${rows}</div>` : `<p class="text-xs text-gray-500 italic">No contact info yet — click "Edit" to add it.</p>`;
-            const container_html = `
+            const contactBody = rows ? `<div class="space-y-1.5">${rows}</div>` : `<p class="text-xs text-gray-500 italic">No contact info yet — click "Edit" to add it.</p>`;
+
+            const section = (title, icon, editFn, bodyHtml) => `
+                <div class="glass-panel p-6 rounded-2xl border border-brand-border space-y-4">
+                    <div class="flex items-center justify-between gap-3 border-b border-brand-border/60 pb-3">
+                        <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid ${icon}" style="color:var(--accent)"></i> ${title}</h3>
+                        <button onclick="${editFn}()" class="shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                    </div>
+                    ${bodyHtml}
+                </div>
+            `;
+
+            const html = `
                 <div class="view-shell animate-rise">
                     <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                         <div class="hero-figure"></div>
                         <div class="flex items-start gap-4 min-w-0">
-                            <div class="hero-ico shrink-0"><i class="fa-solid fa-location-dot"></i></div>
+                            <div class="hero-ico shrink-0"><i class="fa-solid fa-file-lines"></i></div>
                             <div class="min-w-0">
                                 <p class="eyebrow">Admin Panel</p>
-                                <h2 class="hero-title mt-1">Visit / Get In Touch</h2>
-                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">Shown on the First / Login page's contact panel, before anyone signs in.</p>
+                                <h2 class="hero-title mt-1">About Page Content</h2>
+                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">Everything here is shown on the First / Login page, before anyone signs in. Save any section below and it appears there automatically.</p>
                             </div>
                         </div>
                     </div>
-                    <div class="glass-panel p-6 rounded-2xl border border-brand-border space-y-4">
-                        <div class="flex items-center justify-between gap-3 border-b border-brand-border/60 pb-3">
-                            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Contact Info</h3>
-                            <button onclick="openEditClubContactModal()" class="shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
-                        </div>
-                        ${body}
+
+                    ${section('Our Story / Our History', 'fa-clock-rotate-left', 'openEditClubHistoryModal', `<p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.history || 'No history written yet — click "Edit" to add it.'}</p>`)}
+
+                    ${section('Who We Are', 'fa-shield-heart', 'openEditClubDescriptionModal', `<p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.description || 'No description yet — click "Edit" to add one.'}</p>`)}
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        ${section('Our Mission', 'fa-flag', 'openEditClubMissionModal', `<p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.mission || 'No mission statement yet — click "Edit" to add one.'}</p>`)}
+                        ${section('Our Vision', 'fa-eye', 'openEditClubVisionModal', `<p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.vision || 'No vision statement yet — click "Edit" to add one.'}</p>`)}
                     </div>
+
+                    ${section('Visit / Get In Touch', 'fa-location-dot', 'openEditClubContactModal', contactBody)}
                 </div>
             `;
-            container.innerHTML = container_html;
+            container.innerHTML = html;
         }
+
 
         function renderPrivacySettingsView(container) {
             const html = `
