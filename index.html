@@ -6974,24 +6974,24 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                         ${renderCertificatesSection(STATE.members.find(m => m.id === STATE.activeUserId) || null, true)}
                     </div>
 
-                    <!-- Medal Counters -->
+                    <!-- Medal Counters (also act as quick filters — click one to show just that medal) -->
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div class="glass-panel p-4 rounded-2xl border border-brand-border flex items-center justify-between">
+                        <button type="button" onclick="updateAchievementFilter('medal', '${f.medal === 'Gold' ? 'All' : 'Gold'}')" class="glass-panel p-4 rounded-2xl border flex items-center justify-between text-left transition-all ${f.medal === 'Gold' ? 'border-yellow-400 ring-1 ring-yellow-400/60' : 'border-brand-border hover:border-yellow-500/40'}">
                             <div><p class="text-[10px] font-bold uppercase text-gray-400">Gold</p><h3 class="text-2xl font-black text-yellow-400 mt-1">${goldCount}</h3></div>
                             <div class="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-yellow-400 shrink-0"><i class="fa-solid fa-medal"></i></div>
-                        </div>
-                        <div class="glass-panel p-4 rounded-2xl border border-brand-border flex items-center justify-between">
+                        </button>
+                        <button type="button" onclick="updateAchievementFilter('medal', '${f.medal === 'Silver' ? 'All' : 'Silver'}')" class="glass-panel p-4 rounded-2xl border flex items-center justify-between text-left transition-all ${f.medal === 'Silver' ? 'border-slate-300 ring-1 ring-slate-300/60' : 'border-brand-border hover:border-slate-400/40'}">
                             <div><p class="text-[10px] font-bold uppercase text-gray-400">Silver</p><h3 class="text-2xl font-black text-slate-300 mt-1">${silverCount}</h3></div>
                             <div class="w-10 h-10 rounded-xl bg-slate-400/10 border border-slate-400/30 flex items-center justify-center text-slate-300 shrink-0"><i class="fa-solid fa-medal"></i></div>
-                        </div>
-                        <div class="glass-panel p-4 rounded-2xl border border-brand-border flex items-center justify-between">
+                        </button>
+                        <button type="button" onclick="updateAchievementFilter('medal', '${f.medal === 'Bronze' ? 'All' : 'Bronze'}')" class="glass-panel p-4 rounded-2xl border flex items-center justify-between text-left transition-all ${f.medal === 'Bronze' ? 'border-amber-500 ring-1 ring-amber-500/60' : 'border-brand-border hover:border-amber-700/40'}">
                             <div><p class="text-[10px] font-bold uppercase text-gray-400">Bronze</p><h3 class="text-2xl font-black text-amber-500 mt-1">${bronzeCount}</h3></div>
                             <div class="w-10 h-10 rounded-xl bg-amber-700/10 border border-amber-700/30 flex items-center justify-center text-amber-500 shrink-0"><i class="fa-solid fa-medal"></i></div>
-                        </div>
-                        <div class="glass-panel p-4 rounded-2xl border border-brand-border flex items-center justify-between">
+                        </button>
+                        <button type="button" onclick="updateAchievementFilter('medal', 'All')" class="glass-panel p-4 rounded-2xl border flex items-center justify-between text-left transition-all ${f.medal === 'All' ? 'border-brand-red ring-1 ring-brand-red/60' : 'border-brand-border hover:border-brand-red/40'}">
                             <div><p class="text-[10px] font-bold uppercase text-gray-400">Total Medals</p><h3 class="text-2xl font-black text-white mt-1">${totalCount}</h3></div>
                             <div class="w-10 h-10 rounded-xl bg-brand-red/10 border border-brand-red/30 flex items-center justify-center text-brand-red shrink-0"><i class="fa-solid fa-trophy"></i></div>
-                        </div>
+                        </button>
                     </div>
 
                     <!-- Search & Filters -->
