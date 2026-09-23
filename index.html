@@ -4697,59 +4697,79 @@
                 ? `<button onclick="${fnName}()" class="ml-auto shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>`
                 : '';
 
+            const clubMedals = countMedals(activeMembers().flatMap(m => getMemberMedalRecords(m)));
+
             const html = `
                 <div class="view-shell animate-rise">
-                    <!-- Club Photo Slideshow (5 slides) -->
-                    <div class="glass-panel rounded-2xl border border-brand-border overflow-hidden mx-auto" style="width:fit-content;max-width:100%;">
-                        <div class="relative overflow-hidden flex items-center justify-center">
-                            ${slides.length ? `
-                                <img id="aboutSlideImg" src="${slides[aboutSlideIndex].url}" alt="Empire Taekwondo Gym photo" class="max-w-full max-h-[75vh] w-auto h-auto object-contain object-center transition-opacity duration-300 block">
-                                <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-4 pt-8 pb-3 flex items-end justify-between gap-2">
-                                    <p id="aboutSlideCaption" class="text-xs sm:text-sm text-white font-semibold drop-shadow max-w-[75%]">${slides[aboutSlideIndex].caption || ''}</p>
-                                    <span id="aboutSlideCounter" class="text-[10px] font-mono text-gray-200 bg-black/40 px-2 py-0.5 rounded-full shrink-0">${aboutSlideIndex + 1} / ${slides.length}</span>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 items-start">
+                        <!-- LEFT: About the Club (slideshow + club-wide medal totals) -->
+                        <div class="space-y-3 sm:space-y-4">
+                            <div class="glass-panel rounded-2xl border border-brand-border overflow-hidden">
+                                <div class="relative overflow-hidden flex items-center justify-center">
+                                    ${slides.length ? `
+                                        <img id="aboutSlideImg" src="${slides[aboutSlideIndex].url}" alt="Empire Taekwondo Gym photo" class="w-full max-h-[60vh] h-auto object-contain object-center transition-opacity duration-300 block">
+                                        <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-4 pt-8 pb-3 flex items-end justify-between gap-2">
+                                            <p id="aboutSlideCaption" class="text-xs sm:text-sm text-white font-semibold drop-shadow max-w-[75%]">${slides[aboutSlideIndex].caption || ''}</p>
+                                            <span id="aboutSlideCounter" class="text-[10px] font-mono text-gray-200 bg-black/40 px-2 py-0.5 rounded-full shrink-0">${aboutSlideIndex + 1} / ${slides.length}</span>
+                                        </div>
+                                        <button onclick="aboutSlidePrev()" aria-label="Previous photo" class="ios-icon-btn absolute left-2 top-1/2 -translate-y-1/2">
+                                            <i class="fa-solid fa-chevron-left text-xs"></i>
+                                        </button>
+                                        <button onclick="aboutSlideNext()" aria-label="Next photo" class="ios-icon-btn absolute right-2 top-1/2 -translate-y-1/2">
+                                            <i class="fa-solid fa-chevron-right text-xs"></i>
+                                        </button>
+                                        <div class="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
+                                            ${slides.map((s, i) => `<button onclick="aboutSlideGoTo(${i})" aria-label="Go to photo ${i + 1}" class="about-slide-dot w-1.5 h-1.5 rounded-full transition-all ${i === aboutSlideIndex ? 'active-dot' : ''}"></button>`).join('')}
+                                        </div>
+                                    ` : `
+                                        <div class="w-full aspect-[16/9] flex flex-col items-center justify-center text-center px-6 space-y-2">
+                                            <i class="fa-solid fa-images text-2xl text-gray-600"></i>
+                                            <p class="text-xs text-gray-500">${admin ? 'No slideshow photos yet — click "Edit" below to add up to 5.' : 'Club photos coming soon.'}</p>
+                                        </div>
+                                    `}
+                                    ${admin ? `<button onclick="openEditClubSlidesModal()" class="absolute top-3 right-3 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-black/50 hover:bg-black/70 text-white border border-white/20 flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit Photos</button>` : ''}
                                 </div>
-                                <button onclick="aboutSlidePrev()" aria-label="Previous photo" class="ios-icon-btn absolute left-2 top-1/2 -translate-y-1/2">
-                                    <i class="fa-solid fa-chevron-left text-xs"></i>
-                                </button>
-                                <button onclick="aboutSlideNext()" aria-label="Next photo" class="ios-icon-btn absolute right-2 top-1/2 -translate-y-1/2">
-                                    <i class="fa-solid fa-chevron-right text-xs"></i>
-                                </button>
-                                <div class="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
-                                    ${slides.map((s, i) => `<button onclick="aboutSlideGoTo(${i})" aria-label="Go to photo ${i + 1}" class="about-slide-dot w-1.5 h-1.5 rounded-full transition-all ${i === aboutSlideIndex ? 'active-dot' : ''}"></button>`).join('')}
+                            </div>
+
+                            <!-- Club-wide Total Medals -->
+                            <div class="glass-panel rounded-2xl border border-brand-border p-3 sm:p-5">
+                                <div class="flex items-center gap-2 mb-3 flex-wrap">
+                                    <i class="fa-solid fa-medal text-brand-red"></i>
+                                    <h3 class="text-sm font-extrabold text-white">Total Medals</h3>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-red/20 text-brand-red">${clubMedals.total}</span>
                                 </div>
-                            ` : `
-                                <div class="w-[90vw] sm:w-[600px] max-w-full aspect-[16/9] sm:aspect-[21/9] flex flex-col items-center justify-center text-center px-6 space-y-2">
-                                    <i class="fa-solid fa-images text-2xl text-gray-600"></i>
-                                    <p class="text-xs text-gray-500">${admin ? 'No slideshow photos yet — click "Edit" below to add up to 5.' : 'Club photos coming soon.'}</p>
+                                <div class="grid grid-cols-4 gap-2 text-center">
+                                    <div class="p-2 bg-brand-dark/40 rounded-xl border border-brand-border/60"><p class="text-[10px] text-gray-400 font-bold">GOLD</p><p class="text-sm font-black text-yellow-400">${clubMedals.gold}</p></div>
+                                    <div class="p-2 bg-brand-dark/40 rounded-xl border border-brand-border/60"><p class="text-[10px] text-gray-400 font-bold">SILVER</p><p class="text-sm font-black text-slate-300">${clubMedals.silver}</p></div>
+                                    <div class="p-2 bg-brand-dark/40 rounded-xl border border-brand-border/60"><p class="text-[10px] text-gray-400 font-bold">BRONZE</p><p class="text-sm font-black text-amber-500">${clubMedals.bronze}</p></div>
+                                    <div class="p-2 bg-brand-dark/40 rounded-xl border border-brand-border/60"><p class="text-[10px] text-gray-400 font-bold">TOTAL</p><p class="text-sm font-black text-white">${clubMedals.total}</p></div>
                                 </div>
-                            `}
-                            ${admin ? `<button onclick="openEditClubSlidesModal()" class="absolute top-3 right-3 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-black/50 hover:bg-black/70 text-white border border-white/20 flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit Photos</button>` : ''}
+                            </div>
+                        </div>
+
+                        <!-- RIGHT: Club News (top) & Club Members (bottom) -->
+                        <div class="space-y-3 sm:space-y-4">
+                            <div class="glass-panel rounded-2xl border border-brand-border p-3 sm:p-5 min-w-0 flex flex-col">
+                                <div class="flex items-center gap-2 mb-3 flex-wrap">
+                                    <i class="fa-solid fa-bullhorn text-brand-red"></i>
+                                    <h3 class="text-sm font-extrabold text-white">Club News</h3>
+                                    ${STATE.announcements.length ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-red/20 text-brand-red">${STATE.announcements.length}</span>` : ''}
+                                    <button onclick="goToNavItem('${admin ? 'announcements' : 'my-announcements'}')" class="ml-auto shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border">View All</button>
+                                </div>
+                                <div class="flex-1 flex flex-col justify-center">${aboutClubNewsPreviewHtml()}</div>
+                            </div>
+
+                            <div class="glass-panel rounded-2xl border border-brand-border p-3 sm:p-5 min-w-0 flex flex-col">
+                                <div class="flex items-center gap-2 mb-3 flex-wrap">
+                                    <i class="fa-solid fa-address-book text-brand-red"></i>
+                                    <h3 class="text-sm font-extrabold text-white">Club Members</h3>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-red/20 text-brand-red">${activeMembers().length}</span>
+                                    <button onclick="goToNavItem('members')" class="ml-auto shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border">View All</button>
+                                </div>
+                                <div class="flex-1 flex flex-col justify-center">${aboutClubMembersPreviewHtml()}</div>
+                            </div>
                         </div>
                     </div>
-
-                    <!-- Club News & Club Members — side by side, matching the old card format -->
-                    <div class="grid grid-cols-2 gap-3 sm:gap-4">
-                        <div class="glass-panel rounded-2xl border border-brand-border p-3 sm:p-5 min-w-0 flex flex-col h-full">
-                            <div class="flex items-center gap-2 mb-3 flex-wrap">
-                                <i class="fa-solid fa-bullhorn text-brand-red"></i>
-                                <h3 class="text-sm font-extrabold text-white">Club News</h3>
-                                ${STATE.announcements.length ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-red/20 text-brand-red">${STATE.announcements.length}</span>` : ''}
-                                <button onclick="goToNavItem('${admin ? 'announcements' : 'my-announcements'}')" class="ml-auto shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border">View All</button>
-                            </div>
-                            <div class="flex-1 flex flex-col justify-center">${aboutClubNewsPreviewHtml()}</div>
-                        </div>
-
-                        <div class="glass-panel rounded-2xl border border-brand-border p-3 sm:p-5 min-w-0 flex flex-col h-full">
-                            <div class="flex items-center gap-2 mb-3 flex-wrap">
-                                <i class="fa-solid fa-address-book text-brand-red"></i>
-                                <h3 class="text-sm font-extrabold text-white">Club Members</h3>
-                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-red/20 text-brand-red">${activeMembers().length}</span>
-                                <button onclick="goToNavItem('members')" class="ml-auto shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border">View All</button>
-                            </div>
-                            <div class="flex-1 flex flex-col justify-center">${aboutClubMembersPreviewHtml()}</div>
-                        </div>
-                    </div>
-
                 </div>
             `;
             container.innerHTML = html;
