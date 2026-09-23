@@ -2118,17 +2118,15 @@
                     try { await syncPublicClubStats(); } catch (e) { /* best-effort only */ }
                 }
             } catch (err) {
+                // Intentionally silent (console only): schedulePersist() fires this for every
+                // FIRESTORE_COLLECTION_KEYS entry on basically every render, regardless of the
+                // signed-in user's role. For a plain Member, most of these (tournaments,
+                // certificates, promotions, etc.) are admin-only by design per the Security
+                // Rules, so a permission-denied here is EXPECTED and not a real problem —
+                // alerting on it would spam every member on every page. Only explicit,
+                // user-initiated actions (like posts — see reportFirestoreFailure) should
+                // interrupt the user with an alert.
                 console.error('Firestore save failed for', key, err);
-                // Previously silent: the UI would show success (e.g. "Post shared!") even
-                // though nothing was actually saved, and the change would vanish on the
-                // next refresh with no explanation. Now we surface it so the user knows
-                // to retry (e.g. with a smaller photo) instead of losing data silently.
-                const code = String(err?.code || '').toLowerCase();
-                let msg = formatFirestoreError(err, `Could not save your changes to "${key}". Please try again.`);
-                if (code.includes('invalid-argument') || /longer than|exceeds the maximum|1048487|1 mib/i.test(err?.message || '')) {
-                    msg = 'Could not save — this is too large for Firestore\'s per-document limit. Try using fewer or smaller photos.';
-                }
-                appAlert(msg);
             }
         }
 
