@@ -3714,6 +3714,9 @@
             document.getElementById('app').classList.add('hidden');
             document.getElementById('authScreen').classList.remove('hidden');
             switchAuthTab('login');
+            // Refresh the public "Our Story" panel so any edits Admin just saved (History,
+            // Who We Are, Mission, Vision, Contact) show up immediately instead of stale/placeholder text.
+            try { renderAuthClubInfo(); } catch (e) { console.error(e); }
         }
 
         // Every successful login is automatically recorded as a dojang check-in:
