@@ -6054,7 +6054,8 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                             ${v('achievements') ? (memberAchievements.length ? memberAchievements.map(a => `
                                 <div class="flex items-center space-x-2 text-xs text-gray-300">
                                     <i class="fa-solid ${medalIconClass(a)}"></i>
-                                    <span class="truncate">${escHtml(a.title)}</span>
+                                    <span class="truncate flex-1">${escHtml(a.title)}</span>
+                                    ${a.scope ? `<span class="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30">${escHtml(a.scope)}</span>` : ''}
                                 </div>
                             `).join('') : '<p class="text-[11px] text-gray-500 italic">No achievements recorded yet.</p>') : '<p class="text-[11px] text-gray-500 italic">Kept private by this member.</p>'}
                         </div>
