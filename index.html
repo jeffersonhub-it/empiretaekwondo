@@ -5170,6 +5170,10 @@
                 authorId: STATE.activeUserId,
                 authorName: me ? me.name : 'Member',
                 authorPhoto: me ? (me.photo || null) : null,
+                // Stored alongside authorId so Firestore Security Rules can verify post
+                // ownership against request.auth.token.email (authorId is our own internal
+                // member id, not the Firebase Auth uid, so rules can't check it directly).
+                authorEmail: me ? me.email : '',
                 images: postImageDataUrls.slice(),
                 caption: caption,
                 date: new Date().toISOString(),
