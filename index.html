@@ -9854,7 +9854,11 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const membersEl = document.getElementById('authAboutMembers');
             if (membersEl) membersEl.textContent = (Array.isArray(STATE.members) && STATE.members.length) ? STATE.members.length : '—';
             const medalsEl = document.getElementById('authAboutMedals');
-            if (medalsEl) medalsEl.textContent = (Array.isArray(STATE.achievements) && STATE.achievements.length) ? STATE.achievements.length : '—';
+            if (medalsEl) {
+                const totalMedals = (Array.isArray(STATE.members) ? STATE.members : [])
+                    .reduce((sum, m) => sum + getMemberMedalRecords(m).length, 0);
+                medalsEl.textContent = totalMedals > 0 ? totalMedals : '—';
+            }
             const contact = cp.contact || {};
             setText('authAboutAddress', contact.address, '2nd Floor, GIG Mall, 296 Diego Cera Ave, Las Piñas');
             setText('authAboutPhone', contact.phone, '0915 903 2334');
