@@ -4700,10 +4700,10 @@
             const html = `
                 <div class="view-shell animate-rise">
                     <!-- Club Photo Slideshow (5 slides) -->
-                    <div class="glass-panel rounded-2xl border border-brand-border overflow-hidden">
-                        <div class="relative w-full overflow-hidden flex items-center justify-center">
+                    <div class="glass-panel rounded-2xl border border-brand-border overflow-hidden mx-auto" style="width:fit-content;max-width:100%;">
+                        <div class="relative overflow-hidden flex items-center justify-center">
                             ${slides.length ? `
-                                <img id="aboutSlideImg" src="${slides[aboutSlideIndex].url}" alt="Empire Taekwondo Gym photo" class="w-auto h-auto max-w-full max-h-[75vh] object-contain object-center transition-opacity duration-300 block mx-auto">
+                                <img id="aboutSlideImg" src="${slides[aboutSlideIndex].url}" alt="Empire Taekwondo Gym photo" class="max-w-full max-h-[75vh] w-auto h-auto object-contain object-center transition-opacity duration-300 block">
                                 <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-4 pt-8 pb-3 flex items-end justify-between gap-2">
                                     <p id="aboutSlideCaption" class="text-xs sm:text-sm text-white font-semibold drop-shadow max-w-[75%]">${slides[aboutSlideIndex].caption || ''}</p>
                                     <span id="aboutSlideCounter" class="text-[10px] font-mono text-gray-200 bg-black/40 px-2 py-0.5 rounded-full shrink-0">${aboutSlideIndex + 1} / ${slides.length}</span>
@@ -4718,7 +4718,7 @@
                                     ${slides.map((s, i) => `<button onclick="aboutSlideGoTo(${i})" aria-label="Go to photo ${i + 1}" class="about-slide-dot w-1.5 h-1.5 rounded-full transition-all ${i === aboutSlideIndex ? 'active-dot' : ''}"></button>`).join('')}
                                 </div>
                             ` : `
-                                <div class="w-full aspect-[16/9] sm:aspect-[21/9] flex flex-col items-center justify-center text-center px-6 space-y-2">
+                                <div class="w-[90vw] sm:w-[600px] max-w-full aspect-[16/9] sm:aspect-[21/9] flex flex-col items-center justify-center text-center px-6 space-y-2">
                                     <i class="fa-solid fa-images text-2xl text-gray-600"></i>
                                     <p class="text-xs text-gray-500">${admin ? 'No slideshow photos yet — click "Edit" below to add up to 5.' : 'Club photos coming soon.'}</p>
                                 </div>
