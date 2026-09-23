@@ -6920,10 +6920,6 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 getMemberMedalRecords(m).map(r => ({ ...r, memberId: m.id, memberName: m.name }))
             );
 
-            // Build dropdown option sets from the combined data
-            const tournamentNames = [...new Set(allRecords.map(a => a.tournament).filter(Boolean))].sort();
-            const years = [...new Set(allRecords.map(a => new Date(a.date).getFullYear()).filter(y => !isNaN(y)))].sort((a, b) => b - a);
-
             // Apply search + filters
             const filtered = allRecords.filter(ac => {
                 const q = f.search.trim().toLowerCase();
@@ -7005,26 +7001,9 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
 
                     <!-- Search & Filters -->
                     <div class="glass-panel p-4 rounded-2xl border border-brand-border flex flex-wrap gap-3 items-end">
-                        <div class="flex-1 min-w-[200px]">
+                        <div class="w-full sm:w-auto sm:max-w-[220px]">
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Search</label>
-                            <input type="text" id="achSearchInput" value="${f.search}" oninput="updateAchievementFilter('search', this.value)" placeholder="Search title, member, or tournament..." class="w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-400 uppercase">Medal</label>
-                            <select onchange="updateAchievementFilter('medal', this.value)" class="bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 cursor-pointer">
-                                <option value="All" ${f.medal === 'All' ? 'selected' : ''}>All Medals</option>
-                                <option value="Gold" ${f.medal === 'Gold' ? 'selected' : ''}>🥇 Gold</option>
-                                <option value="Silver" ${f.medal === 'Silver' ? 'selected' : ''}>🥈 Silver</option>
-                                <option value="Bronze" ${f.medal === 'Bronze' ? 'selected' : ''}>🥉 Bronze</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-400 uppercase">Discipline</label>
-                            <select onchange="updateAchievementFilter('category', this.value)" class="bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 cursor-pointer">
-                                <option value="All" ${f.category === 'All' ? 'selected' : ''}>All Disciplines</option>
-                                <option value="Kyorugi" ${f.category === 'Kyorugi' ? 'selected' : ''}>Kyorugi</option>
-                                <option value="Poomsae" ${f.category === 'Poomsae' ? 'selected' : ''}>Poomsae</option>
-                            </select>
+                            <input type="text" id="achSearchInput" value="${f.search}" oninput="updateAchievementFilter('search', this.value)" placeholder="Search..." class="w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Medal Category</label>
@@ -7033,20 +7012,6 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                                 <option value="International" ${f.scope === 'International' ? 'selected' : ''}>International</option>
                                 <option value="National" ${f.scope === 'National' ? 'selected' : ''}>National</option>
                                 <option value="Local" ${f.scope === 'Local' ? 'selected' : ''}>Local</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-400 uppercase">Tournament</label>
-                            <select onchange="updateAchievementFilter('tournament', this.value)" class="bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 cursor-pointer max-w-[220px]">
-                                <option value="All" ${f.tournament === 'All' ? 'selected' : ''}>All Tournaments</option>
-                                ${tournamentNames.map(t => `<option value="${t}" ${f.tournament === t ? 'selected' : ''}>${t}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-400 uppercase">Year</label>
-                            <select onchange="updateAchievementFilter('year', this.value)" class="bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 cursor-pointer">
-                                <option value="All" ${f.year === 'All' ? 'selected' : ''}>All Years</option>
-                                ${years.map(y => `<option value="${y}" ${String(f.year) === String(y) ? 'selected' : ''}>${y}</option>`).join('')}
                             </select>
                         </div>
                         ${filtersActive ? `<button onclick="resetAchievementFilters()" class="px-3 py-2 bg-brand-border text-gray-300 text-xs font-bold rounded-xl hover:bg-gray-700 transition-all">Clear Filters</button>` : ''}
