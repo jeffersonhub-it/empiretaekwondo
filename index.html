@@ -2013,6 +2013,12 @@
             // Announcements module filter state (search + category filter)
             announcementFilters: { search: '', category: 'All' },
 
+            // Posts — a lightweight social feed members and admins can post an image + caption
+            // to. Shown as a preview card on the "About the Club" page (below Total Medals) and
+            // as a full grid on its own view — but that view is intentionally NOT in the sidebar
+            // nav; it's only reachable via the "View All" button on that preview card.
+            posts: [],
+
             // ============ ABOUT / CLUB PROFILE (editable by Admin, view-only for Members) ============
             // Everything shown on the About landing page: description, history, mission/vision,
             // and the 5-slide club photo slideshow. Admin edits this from the About page itself
@@ -2071,7 +2077,7 @@
         // Every STATE slice that should survive a refresh / be shared across devices lives
         // as one Firestore document each, under the "clubData" collection. Local UI-only state
         // (currentView, theme, searchQuery, auth.isLoggedIn) is intentionally NOT persisted here.
-        const FIRESTORE_COLLECTION_KEYS = ['members', 'announcements', 'achievements', 'tournaments', 'certificates', 'promotions', 'loginHistory', 'activityLog'];
+        const FIRESTORE_COLLECTION_KEYS = ['members', 'announcements', 'achievements', 'tournaments', 'certificates', 'promotions', 'loginHistory', 'activityLog', 'posts'];
 
         function collectionKeyToPayload(key) {
             if (key === 'privacySettings') return { settings: STATE.privacySettings };
@@ -4442,7 +4448,8 @@
             'my-privacy-settings':  '#64748B',
             'my-profile':           '#E60023',
             'about-club':           '#E60023',
-            'club-information':     '#06B6D4'
+            'club-information':     '#06B6D4',
+            'posts':                '#22C55E'
         };
 
         const BELT_ACCENTS = {
@@ -4625,6 +4632,7 @@
                 // Shared / public info views (visible to Admin and Members)
                 case 'about-club': renderAboutClubView(main); break;
                 case 'club-information': renderClubInformationView(main); break;
+                case 'posts': renderPostsView(main); break;
 
                 // Admin Views
                 case 'members': renderMembersManagement(main); break;
@@ -4766,12 +4774,35 @@
                                     <div class="p-2 bg-brand-dark/40 rounded-xl border border-brand-border/60"><p class="text-[10px] text-gray-400 font-bold">TOTAL</p><p class="text-sm font-black text-white">${clubMedals.total}</p></div>
                                 </div>
                             </div>
+
+                            <!-- Posts (members & admin can share a photo + caption) -->
+                            <div class="glass-panel rounded-2xl border border-brand-border p-3 sm:p-5 min-w-0 flex flex-col">
+                                <div class="flex items-center gap-2 mb-3 flex-wrap">
+                                    <i class="fa-solid fa-images text-brand-red"></i>
+                                    <h3 class="text-sm font-extrabold text-white">Posts</h3>
+                                    ${STATE.posts.length ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-red/20 text-brand-red">${STATE.posts.length}</span>` : ''}
+                                    <button onclick="openAddPostModal()" class="ml-auto shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 flex items-center gap-1"><i class="fa-solid fa-plus"></i> Add a post</button>
+                                    <button onclick="goToNavItem('posts')" class="shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border">View All</button>
+                                </div>
+                                ${aboutClubPostsPreviewHtml()}
+                            </div>
                         </div>
                     </div>
                 </div>
             `;
             container.innerHTML = html;
             startAboutSlideAutoplay(slides.length);
+        }
+
+        // Preview of the most recent posts, shown inside "About the Club" below Total Medals.
+        function aboutClubPostsPreviewHtml() {
+            const recent = [...STATE.posts].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 4);
+            if (!recent.length) return `<p class="text-xs text-gray-500">No posts yet — be the first to share a photo!</p>`;
+            return `
+                <div class="grid grid-cols-2 gap-2.5">
+                    ${recent.map(p => postCardHtml(p, true)).join('')}
+                </div>
+            `;
         }
 
         // Small helper shared by the About-page "View All" buttons above: navigates to a
@@ -4825,6 +4856,230 @@
                     `).join('')}
                 </div>
             `;
+        }
+
+        // ================= POSTS (member/admin photo feed) =================
+        // A lightweight social feed: any signed-in Member or Admin can share a photo + caption.
+        // Intentionally has NO sidebar entry (see getNavGroups) — reachable only via the "Posts"
+        // preview card on the About page (Add a post / View All) and via clicking a post itself.
+
+        function postAuthor(p) {
+            const m = STATE.members.find(mm => mm.id === p.authorId);
+            return {
+                name: (m && m.name) || p.authorName || 'Member',
+                photo: (m && m.photo) || p.authorPhoto || null
+            };
+        }
+
+        function postLikeCount(p) { return Array.isArray(p.likes) ? p.likes.length : 0; }
+        function postIsLikedByMe(p) { return Array.isArray(p.likes) && !!STATE.activeUserId && p.likes.includes(STATE.activeUserId); }
+
+        // One post card — used both in the About-page preview grid and the full Posts view.
+        // Fixed-height image box (object-cover) + a tight text block keeps every card the
+        // same footprint so nothing ever overflows its own border or overlaps a neighbor.
+        function postCardHtml(p, compact) {
+            const author = postAuthor(p);
+            const imgH = compact ? 'h-24 sm:h-28' : 'h-40 sm:h-48';
+            return `
+                <div onclick="openPostDetail('${p.id}')" class="glass-panel rounded-2xl border border-brand-border overflow-hidden cursor-pointer hover:border-brand-red/60 hover:bg-white/[0.02] transition-all flex flex-col" title="Click to view post">
+                    <div class="w-full ${imgH} shrink-0 bg-brand-dark overflow-hidden">
+                        ${p.image ? `<img src="${p.image}" alt="" class="w-full h-full object-cover" loading="lazy">` : `<div class="w-full h-full flex items-center justify-center"><i class="fa-solid fa-image text-xl text-gray-600"></i></div>`}
+                    </div>
+                    <div class="p-2 sm:p-2.5 flex flex-col gap-1 min-w-0">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            <div class="w-4 h-4 rounded-full overflow-hidden border border-brand-border bg-brand-dark flex items-center justify-center shrink-0">
+                                ${author.photo ? `<img src="${author.photo}" alt="" class="w-full h-full object-cover">` : `<i class="fa-solid fa-user text-gray-600 text-[8px]"></i>`}
+                            </div>
+                            <p class="text-[10px] font-bold text-white truncate">${escHtml(author.name)}</p>
+                        </div>
+                        <p class="text-[10px] text-gray-400 truncate">${escHtml(p.caption || '')}</p>
+                        <div class="flex items-center justify-between text-[9px] text-gray-500 mt-0.5">
+                            <span>${notifTimeAgo(p.date)}</span>
+                            <span class="flex items-center gap-2">
+                                <span><i class="fa-regular fa-eye mr-0.5"></i>${p.views || 0}</span>
+                                <span><i class="fa-solid fa-heart mr-0.5 ${postIsLikedByMe(p) ? 'text-brand-red' : ''}"></i>${postLikeCount(p)}</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ---------- Full "Posts" page (View All) ----------
+        function renderPostsView(container) {
+            const posts = [...STATE.posts].sort((a, b) => new Date(b.date) - new Date(a.date));
+            const html = `
+                <div class="view-shell animate-rise">
+                    <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                        <div class="hero-figure"></div>
+                        <div class="flex items-start gap-4 min-w-0">
+                            <div class="hero-ico shrink-0"><i class="fa-solid fa-images"></i></div>
+                            <div class="min-w-0">
+                                <p class="eyebrow">Club Feed</p>
+                                <h2 class="hero-title mt-1">Posts</h2>
+                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">Photos shared by members and admins — training moments, tournaments, and everyday club life.</p>
+                            </div>
+                        </div>
+                        <button onclick="openAddPostModal()" class="px-4 py-2 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center">
+                            <i class="fa-solid fa-plus mr-2"></i> Add a post
+                        </button>
+                    </div>
+
+                    ${posts.length ? `
+                        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                            ${posts.map(p => postCardHtml(p, false)).join('')}
+                        </div>
+                    ` : `<p class="text-xs text-gray-500 italic text-center py-10">No posts yet — click "Add a post" to share the first one.</p>`}
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        // ---------- Add a Post (member or admin) ----------
+        let postImageDataUrl = null;
+
+        function openAddPostModal() {
+            if (!STATE.activeUserId) return;
+            postImageDataUrl = null;
+            const html = `
+                <div class="p-6 space-y-4">
+                    <h3 class="text-lg font-extrabold text-white flex items-center">
+                        <i class="fa-solid fa-images text-brand-red mr-2"></i> Add a Post
+                    </h3>
+                    <form onsubmit="handlePostFormSubmit(event)" class="space-y-3">
+                        <div>
+                            <label class="text-xs text-gray-400 font-bold">Photo</label>
+                            <div class="mt-1">
+                                <div id="postImagePreviewBox" class="w-full h-40 rounded-xl border border-dashed border-brand-border bg-brand-dark flex flex-col items-center justify-center overflow-hidden text-center px-2">
+                                    <i class="fa-solid fa-image text-gray-500 text-xl"></i><span class="text-[10px] text-gray-500 mt-1">No image selected</span>
+                                </div>
+                                <label for="postImageFile" class="cursor-pointer inline-block mt-2 px-3 py-1.5 bg-brand-border hover:bg-gray-700 text-gray-200 text-[10px] font-bold rounded-lg transition-all">
+                                    <i class="fa-solid fa-upload mr-1"></i> Choose Photo
+                                </label>
+                                <input type="file" id="postImageFile" accept="image/*" required onchange="handlePostImageUpload(event)" class="hidden">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 font-bold">Caption</label>
+                            <textarea id="postCaption" required rows="3" placeholder="Say something about this photo..." class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1"></textarea>
+                        </div>
+                        <div class="flex justify-end space-x-2 pt-2">
+                            <button type="button" onclick="closeModal()" class="px-4 py-2 bg-brand-border text-xs text-gray-300 font-bold rounded-xl">Cancel</button>
+                            <button type="submit" class="px-4 py-2 bg-brand-red text-xs text-white font-bold rounded-xl hover:bg-brand-hover">Post</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            openModal(html);
+        }
+
+        function handlePostImageUpload(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                postImageDataUrl = evt.target.result;
+                const box = document.getElementById('postImagePreviewBox');
+                if (box) box.innerHTML = `<img src="${postImageDataUrl}" class="w-full h-full object-cover">`;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function handlePostFormSubmit(e) {
+            e.preventDefault();
+            if (!STATE.activeUserId) return;
+            const caption = document.getElementById('postCaption').value.trim();
+            if (!postImageDataUrl || !caption) {
+                appAlert('Please choose a photo and write a caption.');
+                return;
+            }
+            const me = STATE.members.find(m => m.id === STATE.activeUserId);
+            STATE.posts.unshift({
+                id: 'post' + Date.now(),
+                authorId: STATE.activeUserId,
+                authorName: me ? me.name : 'Member',
+                authorPhoto: me ? (me.photo || null) : null,
+                image: postImageDataUrl,
+                caption: caption,
+                date: new Date().toISOString(),
+                views: 0,
+                likes: []
+            });
+            postImageDataUrl = null;
+            persistCollection('posts');
+            closeModal();
+            showToastNotification('Post shared!');
+            renderView(STATE.currentView);
+        }
+
+        // ---------- Post detail popup ----------
+        function openPostDetail(id) {
+            const p = STATE.posts.find(pp => pp.id === id);
+            if (!p) return;
+            p.views = (p.views || 0) + 1;
+            persistCollection('posts');
+            renderPostDetailModal(p);
+        }
+
+        function renderPostDetailModal(p) {
+            const author = postAuthor(p);
+            const canDelete = isAdmin() || p.authorId === STATE.activeUserId;
+            const html = `
+                <div class="max-w-lg">
+                    <div class="w-full max-h-[50vh] bg-brand-dark overflow-hidden flex items-center justify-center">
+                        ${p.image ? `<img src="${p.image}" alt="" class="w-full h-full object-contain">` : ''}
+                    </div>
+                    <div class="p-5 space-y-3">
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 rounded-full overflow-hidden border border-brand-border bg-brand-dark flex items-center justify-center shrink-0">
+                                ${author.photo ? `<img src="${author.photo}" alt="" class="w-full h-full object-cover">` : `<i class="fa-solid fa-user text-gray-600 text-xs"></i>`}
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-xs font-bold text-white truncate">${escHtml(author.name)}</p>
+                                <p class="text-[10px] text-gray-500">${notifTimeAgo(p.date)}</p>
+                            </div>
+                            <span class="ml-auto text-[10px] text-gray-500 flex items-center gap-2 shrink-0">
+                                <span><i class="fa-regular fa-eye mr-0.5"></i>${p.views || 0} Views</span>
+                            </span>
+                        </div>
+                        <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${escHtml(p.caption || '')}</p>
+                        <div class="flex items-center justify-between pt-2 border-t border-brand-border/60">
+                            <button onclick="togglePostLike('${p.id}')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${postIsLikedByMe(p) ? 'bg-brand-red/20 text-brand-red border border-brand-red/40' : 'bg-white/5 text-gray-300 border border-brand-border hover:bg-white/10'}">
+                                <i class="fa-solid fa-heart"></i> ${postLikeCount(p)} Like${postLikeCount(p) === 1 ? '' : 's'}
+                            </button>
+                            <div class="flex items-center gap-2">
+                                ${canDelete ? `<button onclick="deletePost('${p.id}')" class="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold rounded-xl transition-all"><i class="fa-solid fa-trash mr-1"></i> Delete</button>` : ''}
+                                <button onclick="closeModal()" class="px-3 py-1.5 bg-brand-border hover:bg-gray-700 text-gray-200 text-xs font-bold rounded-xl">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            openModal(html);
+        }
+
+        function togglePostLike(id) {
+            const p = STATE.posts.find(pp => pp.id === id);
+            if (!p || !STATE.activeUserId) return;
+            if (!Array.isArray(p.likes)) p.likes = [];
+            const idx = p.likes.indexOf(STATE.activeUserId);
+            if (idx === -1) p.likes.push(STATE.activeUserId); else p.likes.splice(idx, 1);
+            persistCollection('posts');
+            renderPostDetailModal(p);
+            if (STATE.currentView === 'posts' || STATE.currentView === 'about-club') renderView(STATE.currentView);
+        }
+
+        async function deletePost(id) {
+            const p = STATE.posts.find(pp => pp.id === id);
+            if (!p) return;
+            const canDelete = isAdmin() || p.authorId === STATE.activeUserId;
+            if (!canDelete) return;
+            if (!(await appConfirm('Delete this post?'))) return;
+            STATE.posts = STATE.posts.filter(pp => pp.id !== id);
+            persistCollection('posts');
+            closeModal();
+            showToastNotification('Post deleted.');
+            renderView(STATE.currentView);
         }
 
         // ---------- Slideshow controls (view-only UI state; not persisted to Firestore) ----------
