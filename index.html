@@ -2246,6 +2246,22 @@
         // every signed-in Member immediately, with no manual refresh or re-login needed.
         const REALTIME_SYNC_KEYS = ['members', 'tournaments', 'announcements', 'achievements', 'certificates', 'promotions', 'clubProfile'];
         let realtimeSyncUnsubscribes = {};
+
+        // Right after login, all 7 collections above tend to deliver their first Firestore
+        // snapshot within milliseconds of each other. Without this, each one independently
+        // called renderView() — up to 7 full re-renders of the current page in a row, which
+        // is what caused the visible flicker right after logging in. Coalesce them into a
+        // single re-render instead.
+        let realtimeRenderDebounce = null;
+        function scheduleRealtimeRender() {
+            if (realtimeRenderDebounce) clearTimeout(realtimeRenderDebounce);
+            realtimeRenderDebounce = setTimeout(() => {
+                realtimeRenderDebounce = null;
+                renderSidebarNav();
+                renderView(STATE.currentView);
+            }, 150);
+        }
+
         function startRealtimeSync() {
             REALTIME_SYNC_KEYS.forEach(key => {
                 if (realtimeSyncUnsubscribes[key]) return;
@@ -2264,8 +2280,7 @@
                             if (key === 'members') normalizeMemberRecords();
                         }
                         if (key === 'members') populateUserSelector();
-                        renderSidebarNav();
-                        renderView(STATE.currentView);
+                        scheduleRealtimeRender();
                     });
                 } catch (err) {
                     console.error(`Could not start realtime sync for "${key}":`, err);
