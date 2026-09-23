@@ -4701,9 +4701,9 @@
                 <div class="view-shell animate-rise">
                     <!-- Club Photo Slideshow (5 slides) -->
                     <div class="glass-panel rounded-2xl border border-brand-border overflow-hidden">
-                        <div class="relative w-full overflow-hidden bg-black">
+                        <div class="relative w-full overflow-hidden flex items-center justify-center">
                             ${slides.length ? `
-                                <img id="aboutSlideImg" src="${slides[aboutSlideIndex].url}" alt="Empire Taekwondo Gym photo" class="w-full h-auto max-h-[75vh] object-contain object-center transition-opacity duration-300 block mx-auto">
+                                <img id="aboutSlideImg" src="${slides[aboutSlideIndex].url}" alt="Empire Taekwondo Gym photo" class="w-auto h-auto max-w-full max-h-[75vh] object-contain object-center transition-opacity duration-300 block mx-auto">
                                 <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-4 pt-8 pb-3 flex items-end justify-between gap-2">
                                     <p id="aboutSlideCaption" class="text-xs sm:text-sm text-white font-semibold drop-shadow max-w-[75%]">${slides[aboutSlideIndex].caption || ''}</p>
                                     <span id="aboutSlideCounter" class="text-[10px] font-mono text-gray-200 bg-black/40 px-2 py-0.5 rounded-full shrink-0">${aboutSlideIndex + 1} / ${slides.length}</span>
