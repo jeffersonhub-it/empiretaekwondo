@@ -4714,82 +4714,6 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <div class="glass-panel p-5 rounded-2xl border border-brand-border lg:col-span-2 space-y-4">
-                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-shield-heart" style="color:var(--accent)"></i> Who We Are ${sectionEditBtn('openEditClubDescriptionModal')}</h3>
-                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.description || (admin ? 'No description yet — click "Edit" to add one.' : '')}</p>
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                                <div class="stat-tile p-3 rounded-xl text-center">
-                                    <p class="text-lg font-extrabold text-white">${activeMembers().length}</p>
-                                    <p class="text-[10px] text-gray-400 uppercase font-bold mt-1">Active Members</p>
-                                </div>
-                                <div class="stat-tile p-3 rounded-xl text-center">
-                                    <p class="text-lg font-extrabold text-white">${years}</p>
-                                    <p class="text-[10px] text-gray-400 uppercase font-bold mt-1">Years Training</p>
-                                </div>
-                                <div class="stat-tile p-3 rounded-xl text-center">
-                                    <p class="text-lg font-extrabold text-white">${STATE.achievements.length}</p>
-                                    <p class="text-[10px] text-gray-400 uppercase font-bold mt-1">Medals Earned</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="glass-panel p-5 rounded-2xl border border-brand-border space-y-3">
-                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-user-graduate" style="color:var(--accent)"></i> Head Instructor</h3>
-                            ${head ? `
-                                <div class="flex items-center gap-3">
-                                    <img src="${avatarSrc(head.avatar)}" class="w-12 h-12 rounded-xl object-cover border border-brand-border">
-                                    <div class="min-w-0">
-                                        <p class="text-xs font-bold text-white truncate">${head.name}</p>
-                                        <p class="text-[10px] text-gray-400">${head.role || head.belt}</p>
-                                    </div>
-                                </div>
-                            ` : `<p class="text-xs text-gray-500">No head instructor on file.</p>`}
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div class="glass-panel p-5 rounded-2xl border border-brand-border space-y-2">
-                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-flag" style="color:var(--accent)"></i> Our Mission ${sectionEditBtn('openEditClubMissionModal')}</h3>
-                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.mission || (admin ? 'No mission statement yet — click "Edit" to add one.' : '')}</p>
-                        </div>
-                        <div class="glass-panel p-5 rounded-2xl border border-brand-border space-y-2">
-                            <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-eye" style="color:var(--accent)"></i> Our Vision ${sectionEditBtn('openEditClubVisionModal')}</h3>
-                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${cp.vision || (admin ? 'No vision statement yet — click "Edit" to add one.' : '')}</p>
-                        </div>
-                    </div>
-
-                    <div class="glass-panel p-5 rounded-2xl border border-brand-border">
-                        <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-4"><i class="fa-solid fa-location-dot" style="color:var(--accent)"></i> Visit / Get In Touch ${sectionEditBtn('openEditClubContactModal')}</h3>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            ${contact.address ? `
-                                <a href="https://maps.google.com/?q=${encodeURIComponent(contact.address)}" target="_blank" rel="noopener" class="flex items-start gap-3 p-3 rounded-xl border border-brand-border hover:border-brand-red transition-all">
-                                    <i class="fa-solid fa-location-dot text-sm mt-0.5" style="color:var(--accent)"></i>
-                                    <div class="min-w-0"><p class="text-[10px] text-gray-500 uppercase font-bold">Address</p><p class="text-xs text-gray-300 mt-0.5">${contact.address}</p></div>
-                                </a>` : ''}
-                            ${contact.phone ? `
-                                <a href="tel:${contact.phone.replace(/\s+/g,'')}" class="flex items-start gap-3 p-3 rounded-xl border border-brand-border hover:border-brand-red transition-all">
-                                    <i class="fa-solid fa-phone text-sm mt-0.5" style="color:var(--accent)"></i>
-                                    <div class="min-w-0"><p class="text-[10px] text-gray-500 uppercase font-bold">Call / Text</p><p class="text-xs text-gray-300 mt-0.5">${contact.phone}</p></div>
-                                </a>` : ''}
-                            ${contact.email ? `
-                                <a href="mailto:${contact.email}" class="flex items-start gap-3 p-3 rounded-xl border border-brand-border hover:border-brand-red transition-all">
-                                    <i class="fa-solid fa-envelope text-sm mt-0.5" style="color:var(--accent)"></i>
-                                    <div class="min-w-0"><p class="text-[10px] text-gray-500 uppercase font-bold">Email</p><p class="text-xs text-gray-300 mt-0.5 truncate">${contact.email}</p></div>
-                                </a>` : ''}
-                            ${contact.facebook ? `
-                                <a href="${contact.facebook}" target="_blank" rel="noopener" class="flex items-start gap-3 p-3 rounded-xl border border-brand-border hover:border-brand-red transition-all">
-                                    <i class="fa-brands fa-facebook text-sm mt-0.5" style="color:var(--accent)"></i>
-                                    <div class="min-w-0"><p class="text-[10px] text-gray-500 uppercase font-bold">Facebook</p><p class="text-xs text-gray-300 mt-0.5 truncate">Empire Taekwondo Gym</p></div>
-                                </a>` : ''}
-                            ${contact.instagram ? `
-                                <a href="${contact.instagram}" target="_blank" rel="noopener" class="flex items-start gap-3 p-3 rounded-xl border border-brand-border hover:border-brand-red transition-all">
-                                    <i class="fa-brands fa-instagram text-sm mt-0.5" style="color:var(--accent)"></i>
-                                    <div class="min-w-0"><p class="text-[10px] text-gray-500 uppercase font-bold">Instagram</p><p class="text-xs text-gray-300 mt-0.5 truncate">@empiretaekwondoph</p></div>
-                                </a>` : ''}
-                            ${(!contact.address && !contact.phone && !contact.email && !contact.facebook && !contact.instagram && admin) ? `<p class="text-xs text-gray-500 italic sm:col-span-2">No contact info yet — click "Edit" above to add it.</p>` : ''}
-                        </div>
-                    </div>
                 </div>
             `;
             container.innerHTML = html;
@@ -4885,7 +4809,7 @@
             const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             cp.description = (document.getElementById('cpDescription').value || '').trim();
             recordActivity('Updated Club Profile', null, 'Admin updated the About page "Who We Are" description.');
-            finishClubProfileSave('Description updated');
+            finishClubProfileSave('Description updated', 'privacy-settings');
         }
 
         // Edited from the Admin Panel (Privacy & Access Controls page) only — this is the single
@@ -4925,7 +4849,7 @@
             const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             cp.mission = (document.getElementById('cpMission').value || '').trim();
             recordActivity('Updated Club Profile', null, 'Admin updated the About page mission statement.');
-            finishClubProfileSave('Mission updated');
+            finishClubProfileSave('Mission updated', 'privacy-settings');
         }
 
         function openEditClubVisionModal() {
@@ -4943,7 +4867,7 @@
             const cp = STATE.clubProfile || (STATE.clubProfile = ensureClubProfileDefaults());
             cp.vision = (document.getElementById('cpVision').value || '').trim();
             recordActivity('Updated Club Profile', null, 'Admin updated the About page vision statement.');
-            finishClubProfileSave('Vision updated');
+            finishClubProfileSave('Vision updated', 'privacy-settings');
         }
 
         function openEditClubContactModal() {
@@ -4987,7 +4911,7 @@
                 instagram: (document.getElementById('cpInstagram').value || '').trim()
             };
             recordActivity('Updated Club Profile', null, 'Admin updated the About page contact info.');
-            finishClubProfileSave('Contact info updated');
+            finishClubProfileSave('Contact info updated', 'privacy-settings');
         }
 
         function openEditClubSlidesModal() {
@@ -8622,6 +8546,51 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                         </div>
                         <p class="text-[11px] text-gray-400 -mt-1">This is the same "Our History" text shown to everyone on the First / Login page. Save your changes here and they'll appear there automatically.</p>
                         <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${(STATE.clubProfile && STATE.clubProfile.history) || 'No history written yet — click "Edit" to add it.'}</p>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl border border-brand-border space-y-4">
+                        <div class="flex items-center justify-between gap-3 border-b border-brand-border/60 pb-3">
+                            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Who We Are</h3>
+                            <button onclick="openEditClubDescriptionModal()" class="shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                        </div>
+                        <p class="text-[11px] text-gray-400 -mt-1">Shown on the First / Login page's "Who We Are" panel.</p>
+                        <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${(STATE.clubProfile && STATE.clubProfile.description) || 'No description yet — click "Edit" to add one.'}</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="glass-panel p-6 rounded-2xl border border-brand-border space-y-4">
+                            <div class="flex items-center justify-between gap-3 border-b border-brand-border/60 pb-3">
+                                <h3 class="text-sm font-bold text-white uppercase tracking-wider">Our Mission</h3>
+                                <button onclick="openEditClubMissionModal()" class="shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                            </div>
+                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${(STATE.clubProfile && STATE.clubProfile.mission) || 'No mission statement yet — click "Edit" to add one.'}</p>
+                        </div>
+                        <div class="glass-panel p-6 rounded-2xl border border-brand-border space-y-4">
+                            <div class="flex items-center justify-between gap-3 border-b border-brand-border/60 pb-3">
+                                <h3 class="text-sm font-bold text-white uppercase tracking-wider">Our Vision</h3>
+                                <button onclick="openEditClubVisionModal()" class="shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                            </div>
+                            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">${(STATE.clubProfile && STATE.clubProfile.vision) || 'No vision statement yet — click "Edit" to add one.'}</p>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl border border-brand-border space-y-4">
+                        <div class="flex items-center justify-between gap-3 border-b border-brand-border/60 pb-3">
+                            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Visit / Get In Touch</h3>
+                            <button onclick="openEditClubContactModal()" class="shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                        </div>
+                        <p class="text-[11px] text-gray-400 -mt-1">Shown on the First / Login page's contact panel.</p>
+                        ${(() => {
+                            const c = (STATE.clubProfile && STATE.clubProfile.contact) || {};
+                            const rows = [
+                                c.address ? `<p class="text-xs text-gray-300"><i class="fa-solid fa-location-dot mr-1.5" style="color:var(--accent)"></i>${c.address}</p>` : '',
+                                c.phone ? `<p class="text-xs text-gray-300"><i class="fa-solid fa-phone mr-1.5" style="color:var(--accent)"></i>${c.phone}</p>` : '',
+                                c.email ? `<p class="text-xs text-gray-300"><i class="fa-solid fa-envelope mr-1.5" style="color:var(--accent)"></i>${c.email}</p>` : '',
+                                c.facebook ? `<p class="text-xs text-gray-300"><i class="fa-brands fa-facebook mr-1.5" style="color:var(--accent)"></i>${c.facebook}</p>` : '',
+                                c.instagram ? `<p class="text-xs text-gray-300"><i class="fa-brands fa-instagram mr-1.5" style="color:var(--accent)"></i>${c.instagram}</p>` : ''
+                            ].filter(Boolean).join('');
+                            return rows ? `<div class="space-y-1.5">${rows}</div>` : `<p class="text-xs text-gray-500 italic">No contact info yet — click "Edit" to add it.</p>`;
+                        })()}
                     </div>
 
                     <div class="glass-panel p-6 rounded-2xl border border-brand-border space-y-6">
