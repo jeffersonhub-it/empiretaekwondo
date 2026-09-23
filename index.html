@@ -6916,25 +6916,29 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             );
 
             // Apply search + filters
-            const filtered = allRecords.filter(ac => {
+            const matchesAllExceptMedal = ac => {
                 const q = f.search.trim().toLowerCase();
                 const matchesSearch = !q || (ac.title || '').toLowerCase().includes(q) || (ac.memberName || '').toLowerCase().includes(q) || (ac.tournament || '').toLowerCase().includes(q);
-                const matchesMedal = f.medal === 'All' || ac.medal === f.medal;
                 const matchesCategory = f.category === 'All' || ac.category === f.category;
                 const matchesScope = f.scope === 'All' || ac.scope === f.scope;
                 const matchesTournament = f.tournament === 'All' || ac.tournament === f.tournament;
                 const matchesYear = f.year === 'All' || String(new Date(ac.date).getFullYear()) === String(f.year);
-                return matchesSearch && matchesMedal && matchesCategory && matchesScope && matchesTournament && matchesYear;
+                return matchesSearch && matchesCategory && matchesScope && matchesTournament && matchesYear;
+            };
+            const filtered = allRecords.filter(ac => {
+                const matchesMedal = f.medal === 'All' || ac.medal === f.medal;
+                return matchesMedal && matchesAllExceptMedal(ac);
             });
 
-            // Medal counters (computed from the same combined club-wide dataset used above) —
-            // this combines club-logged achievements with each member's own medal-level
-            // certificates / self-reported tournament medals (getMemberMedalRecords already
-            // de-dupes overlaps per member), so a Gold/Silver/Bronze medal a member registers
-            // themselves counts here too.
-            const goldCount = allRecords.filter(a => a.medal === 'Gold').length;
-            const silverCount = allRecords.filter(a => a.medal === 'Silver').length;
-            const bronzeCount = allRecords.filter(a => a.medal === 'Bronze').length;
+            // Medal counters — reflect every active filter (search, medal category/scope,
+            // discipline, tournament, year) EXCEPT the medal-color filter itself, since these
+            // tiles are what let you switch between Gold/Silver/Bronze/Total. E.g. selecting
+            // "International" under Medal Category updates these counts to International-only
+            // medals, and clicking a tile then narrows the list below to that medal color.
+            const scopedRecords = allRecords.filter(matchesAllExceptMedal);
+            const goldCount = scopedRecords.filter(a => a.medal === 'Gold').length;
+            const silverCount = scopedRecords.filter(a => a.medal === 'Silver').length;
+            const bronzeCount = scopedRecords.filter(a => a.medal === 'Bronze').length;
             const totalCount = goldCount + silverCount + bronzeCount;
 
             const filtersActive = f.search || f.medal !== 'All' || f.category !== 'All' || f.scope !== 'All' || f.tournament !== 'All' || f.year !== 'All';
