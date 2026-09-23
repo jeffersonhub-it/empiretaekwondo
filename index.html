@@ -4736,7 +4736,7 @@
                                 ${STATE.announcements.length ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-red/20 text-brand-red">${STATE.announcements.length}</span>` : ''}
                                 <button onclick="goToNavItem('${admin ? 'announcements' : 'my-announcements'}')" class="ml-auto shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border">View All</button>
                             </div>
-                            <div class="flex-1">${aboutClubNewsPreviewHtml()}</div>
+                            <div class="flex-1 flex flex-col justify-center">${aboutClubNewsPreviewHtml()}</div>
                         </div>
 
                         <div class="glass-panel rounded-2xl border border-brand-border p-3 sm:p-5 min-w-0 flex flex-col h-full">
@@ -4746,7 +4746,7 @@
                                 <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-red/20 text-brand-red">${activeMembers().length}</span>
                                 <button onclick="goToNavItem('members')" class="ml-auto shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border">View All</button>
                             </div>
-                            <div class="flex-1">${aboutClubMembersPreviewHtml()}</div>
+                            <div class="flex-1 flex flex-col justify-center">${aboutClubMembersPreviewHtml()}</div>
                         </div>
                     </div>
 
