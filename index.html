@@ -2250,7 +2250,7 @@
         // About/Club Profile page, plus the Members roster and Tournaments — is watched here
         // for the whole session. New content an Admin adds (or edits/removes) shows up for
         // every signed-in Member immediately, with no manual refresh or re-login needed.
-        const REALTIME_SYNC_KEYS = ['members', 'tournaments', 'announcements', 'achievements', 'certificates', 'promotions', 'clubProfile'];
+        const REALTIME_SYNC_KEYS = ['members', 'tournaments', 'announcements', 'achievements', 'certificates', 'promotions', 'clubProfile', 'posts'];
         let realtimeSyncUnsubscribes = {};
 
         // Right after login, all 7 collections above tend to deliver their first Firestore
@@ -4873,6 +4873,8 @@
 
         function postLikeCount(p) { return Array.isArray(p.likes) ? p.likes.length : 0; }
         function postIsLikedByMe(p) { return Array.isArray(p.likes) && !!STATE.activeUserId && p.likes.includes(STATE.activeUserId); }
+        // Supports old records that only ever had a single "image" field.
+        function postImages(p) { return Array.isArray(p.images) && p.images.length ? p.images : (p.image ? [p.image] : []); }
 
         // One post card — used both in the About-page preview grid and the full Posts view.
         // Fixed-height image box (object-cover) + a tight text block keeps every card the
@@ -4880,10 +4882,12 @@
         function postCardHtml(p, compact) {
             const author = postAuthor(p);
             const imgH = compact ? 'h-24 sm:h-28' : 'h-40 sm:h-48';
+            const imgs = postImages(p);
             return `
                 <div onclick="openPostDetail('${p.id}')" class="glass-panel rounded-2xl border border-brand-border overflow-hidden cursor-pointer hover:border-brand-red/60 hover:bg-white/[0.02] transition-all flex flex-col" title="Click to view post">
-                    <div class="w-full ${imgH} shrink-0 bg-brand-dark overflow-hidden">
-                        ${p.image ? `<img src="${p.image}" alt="" class="w-full h-full object-cover" loading="lazy">` : `<div class="w-full h-full flex items-center justify-center"><i class="fa-solid fa-image text-xl text-gray-600"></i></div>`}
+                    <div class="w-full ${imgH} shrink-0 bg-brand-dark overflow-hidden relative">
+                        ${imgs[0] ? `<img src="${imgs[0]}" alt="" class="w-full h-full object-cover" loading="lazy">` : `<div class="w-full h-full flex items-center justify-center"><i class="fa-solid fa-image text-xl text-gray-600"></i></div>`}
+                        ${imgs.length > 1 ? `<span class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-black/60 text-white flex items-center gap-1"><i class="fa-solid fa-images"></i>${imgs.length}</span>` : ''}
                     </div>
                     <div class="p-2 sm:p-2.5 flex flex-col gap-1 min-w-0">
                         <div class="flex items-center gap-1.5 min-w-0">
@@ -4935,12 +4939,12 @@
             container.innerHTML = html;
         }
 
-        // ---------- Add a Post (member or admin) ----------
-        let postImageDataUrl = null;
+        // ---------- Add a Post (member or admin) — supports multiple photos per post ----------
+        let postImageDataUrls = [];
 
         function openAddPostModal() {
             if (!STATE.activeUserId) return;
-            postImageDataUrl = null;
+            postImageDataUrls = [];
             const html = `
                 <div class="p-6 space-y-4">
                     <h3 class="text-lg font-extrabold text-white flex items-center">
@@ -4948,15 +4952,15 @@
                     </h3>
                     <form onsubmit="handlePostFormSubmit(event)" class="space-y-3">
                         <div>
-                            <label class="text-xs text-gray-400 font-bold">Photo</label>
+                            <label class="text-xs text-gray-400 font-bold">Photos</label>
                             <div class="mt-1">
-                                <div id="postImagePreviewBox" class="w-full h-40 rounded-xl border border-dashed border-brand-border bg-brand-dark flex flex-col items-center justify-center overflow-hidden text-center px-2">
-                                    <i class="fa-solid fa-image text-gray-500 text-xl"></i><span class="text-[10px] text-gray-500 mt-1">No image selected</span>
+                                <div id="postImagePreviewBox" class="grid grid-cols-4 gap-2">
+                                    <label for="postImageFile" class="cursor-pointer aspect-square rounded-xl border border-dashed border-brand-border bg-brand-dark flex flex-col items-center justify-center text-center px-1 hover:border-brand-red/60 transition-all">
+                                        <i class="fa-solid fa-upload text-gray-500 text-sm"></i><span class="text-[9px] text-gray-500 mt-1">Add photo</span>
+                                    </label>
                                 </div>
-                                <label for="postImageFile" class="cursor-pointer inline-block mt-2 px-3 py-1.5 bg-brand-border hover:bg-gray-700 text-gray-200 text-[10px] font-bold rounded-lg transition-all">
-                                    <i class="fa-solid fa-upload mr-1"></i> Choose Photo
-                                </label>
-                                <input type="file" id="postImageFile" accept="image/*" required onchange="handlePostImageUpload(event)" class="hidden">
+                                <input type="file" id="postImageFile" accept="image/*" multiple onchange="handlePostImageUpload(event)" class="hidden">
+                                <p class="text-[9px] text-gray-500 mt-1.5">You can select more than one photo at a time, or click "Add photo" again to add more.</p>
                             </div>
                         </div>
                         <div>
@@ -4974,23 +4978,53 @@
         }
 
         function handlePostImageUpload(e) {
-            const file = e.target.files && e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                postImageDataUrl = evt.target.result;
-                const box = document.getElementById('postImagePreviewBox');
-                if (box) box.innerHTML = `<img src="${postImageDataUrl}" class="w-full h-full object-cover">`;
-            };
-            reader.readAsDataURL(file);
+            const files = e.target.files ? Array.from(e.target.files) : [];
+            if (!files.length) return;
+            let pending = files.length;
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    postImageDataUrls.push(evt.target.result);
+                    pending--;
+                    if (pending === 0) {
+                        refreshPostImagePreview();
+                        const fileInput = document.getElementById('postImageFile');
+                        if (fileInput) fileInput.value = '';
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function removePostImage(idx) {
+            postImageDataUrls.splice(idx, 1);
+            refreshPostImagePreview();
+        }
+
+        // Re-renders the photo thumbnail grid inside the Add-a-Post modal: one tile per
+        // selected photo (with a remove "x"), plus a trailing "Add photo" tile.
+        function refreshPostImagePreview() {
+            const box = document.getElementById('postImagePreviewBox');
+            if (!box) return;
+            box.innerHTML = `
+                ${postImageDataUrls.map((url, i) => `
+                    <div class="relative aspect-square rounded-xl overflow-hidden border border-brand-border bg-brand-dark group">
+                        <img src="${url}" class="w-full h-full object-cover">
+                        <button type="button" onclick="removePostImage(${i})" class="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 hover:bg-red-500 text-white text-[10px] flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                `).join('')}
+                <label for="postImageFile" class="cursor-pointer aspect-square rounded-xl border border-dashed border-brand-border bg-brand-dark flex flex-col items-center justify-center text-center px-1 hover:border-brand-red/60 transition-all">
+                    <i class="fa-solid fa-upload text-gray-500 text-sm"></i><span class="text-[9px] text-gray-500 mt-1">Add photo</span>
+                </label>
+            `;
         }
 
         function handlePostFormSubmit(e) {
             e.preventDefault();
             if (!STATE.activeUserId) return;
             const caption = document.getElementById('postCaption').value.trim();
-            if (!postImageDataUrl || !caption) {
-                appAlert('Please choose a photo and write a caption.');
+            if (!postImageDataUrls.length || !caption) {
+                appAlert('Please choose at least one photo and write a caption.');
                 return;
             }
             const me = STATE.members.find(m => m.id === STATE.activeUserId);
@@ -4999,13 +5033,13 @@
                 authorId: STATE.activeUserId,
                 authorName: me ? me.name : 'Member',
                 authorPhoto: me ? (me.photo || null) : null,
-                image: postImageDataUrl,
+                images: postImageDataUrls.slice(),
                 caption: caption,
                 date: new Date().toISOString(),
                 views: 0,
                 likes: []
             });
-            postImageDataUrl = null;
+            postImageDataUrls = [];
             persistCollection('posts');
             closeModal();
             showToastNotification('Post shared!');
@@ -5013,21 +5047,43 @@
         }
 
         // ---------- Post detail popup ----------
+        let postDetailImgIndex = 0;
+
         function openPostDetail(id) {
             const p = STATE.posts.find(pp => pp.id === id);
             if (!p) return;
             p.views = (p.views || 0) + 1;
             persistCollection('posts');
+            postDetailImgIndex = 0;
+            renderPostDetailModal(p);
+        }
+
+        function postDetailGoTo(id, i) {
+            const p = STATE.posts.find(pp => pp.id === id);
+            if (!p) return;
+            const imgs = postImages(p);
+            if (!imgs.length) return;
+            postDetailImgIndex = ((i % imgs.length) + imgs.length) % imgs.length;
             renderPostDetailModal(p);
         }
 
         function renderPostDetailModal(p) {
             const author = postAuthor(p);
             const canDelete = isAdmin() || p.authorId === STATE.activeUserId;
+            const imgs = postImages(p);
+            if (postDetailImgIndex >= imgs.length) postDetailImgIndex = 0;
             const html = `
                 <div class="max-w-lg">
-                    <div class="w-full max-h-[50vh] bg-brand-dark overflow-hidden flex items-center justify-center">
-                        ${p.image ? `<img src="${p.image}" alt="" class="w-full h-full object-contain">` : ''}
+                    <div class="relative w-full max-h-[50vh] bg-brand-dark overflow-hidden flex items-center justify-center">
+                        ${imgs.length ? `<img src="${imgs[postDetailImgIndex]}" alt="" class="w-full h-full object-contain">` : ''}
+                        ${imgs.length > 1 ? `
+                            <button onclick="postDetailGoTo('${p.id}', ${postDetailImgIndex - 1})" aria-label="Previous photo" class="ios-icon-btn absolute left-2 top-1/2 -translate-y-1/2"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+                            <button onclick="postDetailGoTo('${p.id}', ${postDetailImgIndex + 1})" aria-label="Next photo" class="ios-icon-btn absolute right-2 top-1/2 -translate-y-1/2"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+                            <span class="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] font-mono text-gray-200 bg-black/50 px-2 py-0.5 rounded-full">${postDetailImgIndex + 1} / ${imgs.length}</span>
+                            <div class="absolute top-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
+                                ${imgs.map((im, i) => `<button onclick="postDetailGoTo('${p.id}', ${i})" aria-label="Go to photo ${i + 1}" class="about-slide-dot w-1.5 h-1.5 rounded-full transition-all ${i === postDetailImgIndex ? 'active-dot' : ''}"></button>`).join('')}
+                            </div>
+                        ` : ''}
                     </div>
                     <div class="p-5 space-y-3">
                         <div class="flex items-center gap-2">
