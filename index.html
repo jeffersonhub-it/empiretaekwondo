@@ -3962,19 +3962,8 @@
                 ]
             });
 
-            groups.push({
-                id: 'club',
-                label: 'Club',
-                icon: 'fa-people-group',
-                color: '#FB923C',
-                items: isAdmin ? [
-                    { id: 'announcements', label: 'Club News', icon: 'fa-bullhorn', badge: STATE.announcements.length },
-                    { id: 'members', label: 'Club Members', icon: 'fa-address-book', badge: activeMembers().length }
-                ] : [
-                    { id: 'my-announcements', label: 'Club News', icon: 'fa-bullhorn', badge: STATE.announcements.length },
-                    { id: 'members', label: 'Club Members', icon: 'fa-address-book', badge: activeMembers().length }
-                ]
-            });
+            // "Club News" and "Club Members" now live as sections inside "About the Club"
+            // (see renderAboutClubView) instead of their own sidebar dropdown.
 
             if (isAdmin) {
                 // Admin-only tools stay in their own clearly-separated group.
@@ -4720,10 +4709,77 @@
                         </div>
                     </div>
 
+                    <!-- Club News (moved here from the old "Club" sidebar group) -->
+                    <div class="glass-panel rounded-2xl border border-brand-border p-4 sm:p-5">
+                        <div class="flex items-center gap-2 mb-3">
+                            <i class="fa-solid fa-bullhorn text-brand-red"></i>
+                            <h3 class="text-sm font-extrabold text-white">Club News</h3>
+                            ${STATE.announcements.length ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-red/20 text-brand-red">${STATE.announcements.length}</span>` : ''}
+                            <button onclick="goToNavItem('${admin ? 'announcements' : 'my-announcements'}')" class="ml-auto shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border">View All</button>
+                        </div>
+                        ${aboutClubNewsPreviewHtml()}
+                    </div>
+
+                    <!-- Club Members (moved here from the old "Club" sidebar group) -->
+                    <div class="glass-panel rounded-2xl border border-brand-border p-4 sm:p-5">
+                        <div class="flex items-center gap-2 mb-3">
+                            <i class="fa-solid fa-address-book text-brand-red"></i>
+                            <h3 class="text-sm font-extrabold text-white">Club Members</h3>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-red/20 text-brand-red">${activeMembers().length}</span>
+                            <button onclick="goToNavItem('members')" class="ml-auto shrink-0 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-brand-border">View All</button>
+                        </div>
+                        ${aboutClubMembersPreviewHtml()}
+                    </div>
+
                 </div>
             `;
             container.innerHTML = html;
             startAboutSlideAutoplay(slides.length);
+        }
+
+        // Small helper shared by the About-page "View All" buttons above: navigates to a
+        // full view (Club News or Club Members) exactly like the old sidebar links did.
+        function goToNavItem(viewId) {
+            STATE.currentView = viewId;
+            renderSidebarNav();
+            renderView(viewId);
+        }
+
+        // Compact preview of the 3 most recent posts, shown inside "About the Club".
+        function aboutClubNewsPreviewHtml() {
+            const recent = [...STATE.announcements].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 3);
+            if (!recent.length) return `<p class="text-xs text-gray-500">No club news posted yet.</p>`;
+            return `
+                <div class="space-y-2">
+                    ${recent.map(a => `
+                        <div onclick="openAnnouncementDetail('${a.id}')" class="flex items-center gap-3 p-2.5 rounded-xl border border-brand-border bg-white/[0.02] hover:bg-white/[0.05] cursor-pointer transition-all">
+                            <i class="fa-solid ${announcementCategoryIcon(a.category)} text-brand-red shrink-0"></i>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-xs font-bold text-white truncate">${escHtml(a.title)}</p>
+                                <p class="text-[10px] text-gray-500">${a.date}</p>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Compact preview of a few member avatars, shown inside "About the Club".
+        function aboutClubMembersPreviewHtml() {
+            const members = activeMembers().slice(0, 6);
+            if (!members.length) return `<p class="text-xs text-gray-500">No members yet.</p>`;
+            return `
+                <div class="flex flex-wrap gap-3">
+                    ${members.map(m => `
+                        <div onclick="goToNavItem('members')" class="flex flex-col items-center gap-1 w-16 cursor-pointer group">
+                            <div class="w-10 h-10 rounded-full overflow-hidden border border-brand-border bg-brand-dark flex items-center justify-center group-hover:border-brand-red/60 transition-all">
+                                ${m.photo ? `<img src="${m.photo}" alt="" class="w-full h-full object-cover">` : `<i class="fa-solid fa-user text-gray-600 text-xs"></i>`}
+                            </div>
+                            <p class="text-[9px] text-gray-400 truncate w-full text-center">${escHtml((m.name || '').split(' ')[0] || '')}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
         }
 
         // ---------- Slideshow controls (view-only UI state; not persisted to Firestore) ----------
