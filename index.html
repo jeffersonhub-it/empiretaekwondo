@@ -2082,6 +2082,9 @@
         async function persistCollection(key) {
             try {
                 await persistCollectionStrict(key);
+                if (key === 'members' || key === 'achievements') {
+                    try { await syncPublicClubStats(); } catch (e) { /* best-effort only */ }
+                }
             } catch (err) {
                 console.error('Firestore save failed for', key, err);
             }
@@ -9920,13 +9923,14 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             setText('authAboutMission', cp.mission, "Details about the club's mission will appear here.");
             setText('authAboutVision', cp.vision, "Details about the club's vision will appear here.");
             const membersEl = document.getElementById('authAboutMembers');
-            if (membersEl) membersEl.textContent = activeMembers().length ? activeMembers().length : '—';
             const medalsEl = document.getElementById('authAboutMedals');
-            if (medalsEl) {
-                const totalMedals = activeMembers()
-                    .reduce((sum, m) => sum + getMemberMedalRecords(m).length, 0);
-                medalsEl.textContent = totalMedals > 0 ? totalMedals : '—';
-            }
+            // Before anyone signs in, the members/achievements collections aren't readable
+            // (Firestore rules require auth), so STATE.members is still empty. Use the small
+            // public "publicStats" summary doc instead — it's kept in sync by Admin actions
+            // and is the only part of club data that's publicly readable pre-login.
+            const stats = STATE.publicClubStats;
+            if (membersEl) membersEl.textContent = (stats && stats.members) ? stats.members : '—';
+            if (medalsEl) medalsEl.textContent = (stats && stats.medals) ? stats.medals : '—';
             const contact = cp.contact || {};
             setText('authAboutAddress', contact.address, '2nd Floor, GIG Mall, 296 Diego Cera Ave, Las Piñas');
             setText('authAboutPhone', contact.phone, '0915 903 2334');
@@ -9948,6 +9952,32 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                     }
                 }
             } catch (e) { /* not publicly readable yet — keep placeholder copy */ }
+            try {
+                const statsSnap = await window.fb.loadCollectionDoc('publicStats');
+                if (statsSnap && statsSnap.exists && statsSnap.exists()) {
+                    STATE.publicClubStats = statsSnap.data() || null;
+                    renderAuthClubInfo();
+                }
+            } catch (e) { /* not publicly readable yet — keep the "—" placeholder */ }
+        }
+
+        // Computes the small public-facing summary (active member count + total medals)
+        // that the logged-out login screen shows. Kept as its own doc (clubData/publicStats)
+        // so it can be made publicly readable without exposing the full private member list.
+        function computePublicClubStats() {
+            const members = activeMembers();
+            const medals = members.reduce((sum, m) => sum + getMemberMedalRecords(m).length, 0);
+            return { members: members.length, medals: medals };
+        }
+
+        // Best-effort push of the summary above to Firestore. Only Admin accounts are allowed
+        // to write clubData/* per the security rules, so a member's own self-update simply
+        // fails silently here and the count stays slightly stale until an Admin next saves.
+        async function syncPublicClubStats() {
+            await ensureFirebaseReady();
+            const stats = computePublicClubStats();
+            STATE.publicClubStats = stats;
+            await window.fb.saveCollectionDoc('publicStats', stats);
         }
 
         async function bootApp() {
