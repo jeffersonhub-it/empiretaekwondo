@@ -134,6 +134,12 @@
             // other than the member ever sees or sets the actual value.
             sendPasswordReset: (email) => sendPasswordResetEmail(fbAuth, email),
             watchAuth: (cb) => onAuthStateChanged(fbAuth, cb),
+            // The exact email string Firestore Security Rules see as request.auth.token.email
+            // for whoever is currently signed in. Used when writing a post's authorEmail so it
+            // is guaranteed to match — pulling it from the member record instead (different
+            // casing, a stale/missing record, etc.) could silently mismatch and get the write
+            // rejected as permission-denied.
+            currentUserEmail: () => fbAuth.currentUser ? fbAuth.currentUser.email : null,
             loadCollectionDoc: (key) => getDoc(doc(fbDb, 'clubData', key)),
             saveCollectionDoc: (key, data) => setDoc(doc(fbDb, 'clubData', key), data),
             // Realtime listener on one clubData/{key} document — used so an Admin who is
@@ -2146,7 +2152,11 @@
         function reportFirestoreFailure(label, err) {
             console.error(`Firestore save failed for ${label}:`, err);
             const code = String(err?.code || '').toLowerCase();
-            let msg = formatFirestoreError(err, `Could not save your changes to "${label}". Please try again.`);
+            let msg = formatFirestoreError(
+                err,
+                `Could not save your changes to "${label}". Please try again.`,
+                'Firestore permission denied. Make sure the "clubData/posts/items/{postId}" rules (from firestore.rules) have been published in Firebase Console, and that you are posting as your own account.'
+            );
             if (code.includes('invalid-argument') || /longer than|exceeds the maximum|1048487|1 mib/i.test(err?.message || '')) {
                 msg = 'Could not save — this post is too large for Firestore\'s per-document limit. Try using fewer or smaller photos.';
             }
@@ -2185,10 +2195,10 @@
             }
         }
 
-        function formatFirestoreError(err, fallback) {
+        function formatFirestoreError(err, fallback, permissionMsg) {
             const code = String(err?.code || '').toLowerCase();
             if (code.includes('permission-denied')) {
-                return 'Firestore permission denied. Publish the self-registration Rules supplied with this app, then try registering again with a new email.';
+                return permissionMsg || 'Firestore permission denied. Publish the self-registration Rules supplied with this app, then try registering again with a new email.';
             }
             if (code.includes('failed-precondition')) {
                 return 'Firestore is not ready for this database operation. Check that Firestore Database is enabled in Firebase Console.';
@@ -5164,7 +5174,9 @@
                 appAlert('Please choose at least one photo and write a caption.');
                 return;
             }
-            const me = STATE.members.find(m => m.id === STATE.activeUserId);
+            const currentEmail = window.fb && window.fb.currentUserEmail ? window.fb.currentUserEmail() : null;
+            const me = STATE.members.find(m => m.id === STATE.activeUserId)
+                || (currentEmail ? STATE.members.find(m => m.email && m.email.toLowerCase() === currentEmail.toLowerCase()) : null);
             const newPost = {
                 id: 'post' + Date.now(),
                 authorId: STATE.activeUserId,
@@ -5173,7 +5185,10 @@
                 // Stored alongside authorId so Firestore Security Rules can verify post
                 // ownership against request.auth.token.email (authorId is our own internal
                 // member id, not the Firebase Auth uid, so rules can't check it directly).
-                authorEmail: me ? me.email : '',
+                // Pulled straight from the signed-in Firebase user, NOT the member record —
+                // guarantees an exact match with what the rules compare against.
+                authorEmail: (window.fb && window.fb.currentUserEmail && window.fb.currentUserEmail())
+                    || (me ? me.email : ''),
                 images: postImageDataUrls.slice(),
                 caption: caption,
                 date: new Date().toISOString(),
