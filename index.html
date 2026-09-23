@@ -1991,7 +1991,7 @@
             achievements: [],
 
             // Achievements module filter state (search + dropdown filters)
-            achievementFilters: { search: '', medal: 'All', category: 'All', tournament: 'All', year: 'All' },
+            achievementFilters: { search: '', medal: 'All', category: 'All', scope: 'All', tournament: 'All', year: 'All' },
 
             // Tournaments
             tournaments: [],
@@ -5495,7 +5495,7 @@
                 source: 'club', id: a.id, type: a.type || 'Medal',
                 title: a.title || (a.medal ? `${a.medal} Medal` : 'Award'),
                 tournament: a.tournament || '', category: a.category || '', date: a.date || '',
-                medal: normalizeMedalName(a.medal)
+                medal: normalizeMedalName(a.medal), scope: a.scope || ''
             }));
             const keyOf = (name, medal) => `${String(name || '').trim().toLowerCase()}|${medal}`;
             const seen = new Set(club.map(a => keyOf(a.tournament, a.medal)));
@@ -5504,7 +5504,10 @@
                 .map(t => ({
                     source: 'self', id: t.id, type: 'Medal',
                     title: `${t.medal} Medalist${t.category ? ' — ' + t.category : ''}`,
-                    tournament: t.name, category: t.classification || t.type || '', date: t.date, medal: t.medal
+                    tournament: t.name, category: t.classification || t.type || '', date: t.date, medal: t.medal,
+                    // The Tournament History "Type" field (International/National/Local) is
+                    // this record's medal category — reused here rather than duplicated.
+                    scope: t.type || ''
                 }));
             self.forEach(t => seen.add(keyOf(t.tournament, t.medal)));
             // Self-service "Add Certificate" entries (member.awardCertificates) also carry a
@@ -5517,7 +5520,7 @@
                     source: 'certificate', id: c.id, type: 'Medal',
                     title: c.title || `${c.level} Medal`,
                     tournament: c.tournament || '', category: c.category || '', date: c.date || '',
-                    medal: c.level
+                    medal: c.level, scope: c.scope || ''
                 }));
             certs.forEach(c => seen.add(keyOf(c.tournament, c.medal)));
             return [...club, ...self, ...certs].sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -5591,7 +5594,7 @@
                             </div>
                             <div class="flex-1 min-w-0">
                                 <h5 class="text-xs font-bold text-white truncate" title="${escHtml(a.title)}">${escHtml(a.title)}</h5>
-                                <p class="text-[10px] text-gray-400 truncate">${[a.tournament, a.category, a.date].filter(Boolean).map(escHtml).join(' · ')}</p>
+                                <p class="text-[10px] text-gray-400 truncate">${[a.tournament, a.scope, a.category, a.date].filter(Boolean).map(escHtml).join(' · ')}</p>
                                 ${a.source === 'self' ? '<p class="text-[9px] text-gray-500 mt-0.5">Self-reported</p>' : ''}
                             </div>
                             ${opts.admin && a.source === 'club' ? `
@@ -5787,6 +5790,12 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                                 <input type="text" id="certCategory" maxlength="60" placeholder="e.g. -68kg Lightweight" class="${inputClass}">
                             </div>
                         </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-gray-400 uppercase">Medal Category *</label>
+                            <select id="certScope" required class="${inputClass}">
+                                ${['International', 'National', 'Local'].map(o => `<option value="${o}">${o}</option>`).join('')}
+                            </select>
+                        </div>
                         <div class="flex justify-end gap-2 pt-2">
                             <button type="button" onclick="closeModal()" class="px-4 py-2 bg-brand-dark border border-brand-border text-white text-xs font-bold rounded-xl">Cancel</button>
                             <button type="submit" id="certSubmitBtn" class="px-4 py-2 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl">Create Certificate</button>
@@ -5811,6 +5820,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 level: document.getElementById('certLevel').value,
                 tournament: document.getElementById('certTournament').value.trim(),
                 category: document.getElementById('certCategory').value.trim(),
+                scope: document.getElementById('certScope').value,
                 date: document.getElementById('certDate').value,
                 issuedAt: new Date().toISOString()
             };
@@ -6920,9 +6930,10 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 const matchesSearch = !q || (ac.title || '').toLowerCase().includes(q) || (ac.memberName || '').toLowerCase().includes(q) || (ac.tournament || '').toLowerCase().includes(q);
                 const matchesMedal = f.medal === 'All' || ac.medal === f.medal;
                 const matchesCategory = f.category === 'All' || ac.category === f.category;
+                const matchesScope = f.scope === 'All' || ac.scope === f.scope;
                 const matchesTournament = f.tournament === 'All' || ac.tournament === f.tournament;
                 const matchesYear = f.year === 'All' || String(new Date(ac.date).getFullYear()) === String(f.year);
-                return matchesSearch && matchesMedal && matchesCategory && matchesTournament && matchesYear;
+                return matchesSearch && matchesMedal && matchesCategory && matchesScope && matchesTournament && matchesYear;
             });
 
             // Medal counters (computed from the same combined club-wide dataset used above) —
@@ -6935,7 +6946,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const bronzeCount = allRecords.filter(a => a.medal === 'Bronze').length;
             const totalCount = goldCount + silverCount + bronzeCount;
 
-            const filtersActive = f.search || f.medal !== 'All' || f.category !== 'All' || f.tournament !== 'All' || f.year !== 'All';
+            const filtersActive = f.search || f.medal !== 'All' || f.category !== 'All' || f.scope !== 'All' || f.tournament !== 'All' || f.year !== 'All';
 
             const medalBadgeClass = (medal) => medal === 'Gold' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
                 : medal === 'Silver' ? 'bg-slate-400/20 text-slate-300 border border-slate-400/30'
@@ -7016,6 +7027,15 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                             </select>
                         </div>
                         <div>
+                            <label class="text-[10px] font-bold text-gray-400 uppercase">Medal Category</label>
+                            <select onchange="updateAchievementFilter('scope', this.value)" class="bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 cursor-pointer">
+                                <option value="All" ${f.scope === 'All' ? 'selected' : ''}>All Categories</option>
+                                <option value="International" ${f.scope === 'International' ? 'selected' : ''}>International</option>
+                                <option value="National" ${f.scope === 'National' ? 'selected' : ''}>National</option>
+                                <option value="Local" ${f.scope === 'Local' ? 'selected' : ''}>Local</option>
+                            </select>
+                        </div>
+                        <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Tournament</label>
                             <select onchange="updateAchievementFilter('tournament', this.value)" class="bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 cursor-pointer max-w-[220px]">
                                 <option value="All" ${f.tournament === 'All' ? 'selected' : ''}>All Tournaments</option>
@@ -7049,6 +7069,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                                     <p class="text-xs text-brand-red font-semibold mt-1">${ac.memberName}</p>
                                     <p class="text-[11px] text-gray-400 mt-2"><i class="fa-solid fa-flag mr-1"></i> ${ac.tournament}</p>
                                     <div class="flex items-center gap-1.5 mt-2 flex-wrap">
+                                        ${ac.scope ? `<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30">${ac.scope}</span>` : ''}
                                         <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-brand-border text-gray-300">${ac.category}</span>
                                         <span class="px-2 py-0.5 rounded text-[9px] font-bold ${medalBadgeClass(ac.medal)}">${ac.medal}</span>
                                         ${ac.source !== 'club' ? `<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-white/5 text-gray-400 border border-white/10">Self-reported</span>` : ''}
@@ -7095,7 +7116,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
         }
 
         function resetAchievementFilters() {
-            STATE.achievementFilters = { search: '', medal: 'All', category: 'All', tournament: 'All', year: 'All' };
+            STATE.achievementFilters = { search: '', medal: 'All', category: 'All', scope: 'All', tournament: 'All', year: 'All' };
             renderAchievementsView(document.getElementById('mainViewport'));
         }
 
@@ -7151,6 +7172,12 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                                 <input type="date" id="achDate" required value="${existing ? existing.date : todayStr}" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1">
                             </div>
                         </div>
+                        <div>
+                            <label class="text-xs text-gray-400 font-bold">Medal Category</label>
+                            <select id="achScope" class="w-full bg-brand-dark border border-brand-border rounded-xl p-2.5 text-xs text-white mt-1">
+                                ${['International', 'National', 'Local'].map(o => `<option value="${o}" ${(existing ? existing.scope : 'International') === o ? 'selected' : ''}>${o}</option>`).join('')}
+                            </select>
+                        </div>
                         ${isTrophy ? '' : `
                             <div>
                                 <label class="text-xs text-gray-400 font-bold">Medal</label>
@@ -7195,6 +7222,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const title = document.getElementById('achTitle').value.trim();
             const tournament = document.getElementById('achTournament').value.trim();
             const category = document.getElementById('achCategory').value;
+            const scope = document.getElementById('achScope').value;
             const date = document.getElementById('achDate').value;
             const medal = type === 'Trophy' ? 'Champion' : document.getElementById('achMedal').value;
             const member = STATE.members.find(m => m.id === memberId);
@@ -7212,6 +7240,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                     ach.title = title;
                     ach.tournament = tournament;
                     ach.category = category;
+                    ach.scope = scope;
                     ach.medal = medal;
                     ach.type = type;
                     ach.date = date;
@@ -7225,6 +7254,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                     title: title,
                     tournament: tournament,
                     category: category,
+                    scope: scope,
                     medal: medal,
                     type: type,
                     date: date || new Date().toISOString().split('T')[0]
