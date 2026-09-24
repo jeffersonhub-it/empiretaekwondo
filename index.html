@@ -86,7 +86,8 @@
         } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
         import {
             getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot,
-            collection, getDocs
+            collection, getDocs,
+            writeBatch, arrayUnion
         } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
         // Your web app's Firebase configuration (project: taekwando-5bae0)
@@ -194,6 +195,26 @@
             watchPostDocs: (cb) => onSnapshot(collection(fbDb, 'clubData', 'posts', 'items'), cb),
             loadPublicDoc: (key) => getDoc(doc(fbDb, 'publicIndex', key)),
             savePublicDoc: (key, data) => setDoc(doc(fbDb, 'publicIndex', key), data),
+            // ================= REGISTRATION (atomic) =================
+            // Public read of ONE username claim (usernames/{name} -> { email, uid }).
+            lookupUsername: async (usernameLower) => {
+                const snap = await getDoc(doc(fbDb, 'usernames', usernameLower));
+                return snap.exists() ? (snap.data().email || null) : null;
+            },
+            // Finishes a self-registration for the CURRENT signed-in user in ONE atomic batch:
+            //   (1) claim the username (create-only: fails if anyone already owns it), and
+            //   (2) append exactly one 'pending' Member record to clubData/members.
+            // Both writes succeed or neither does. It never touches roles/ and never overwrites other
+            // members' data (arrayUnion appends server-side, no read-modify-write of the whole roster).
+            // The Firestore Rules independently enforce: own email, authRole 'member', status 'pending'.
+            completeRegistration: async (usernameLower, memberRecord) => {
+                const user = fbAuth.currentUser;
+                if (!user) throw new Error('Not signed in.');
+                const batch = writeBatch(fbDb);
+                batch.set(doc(fbDb, 'usernames', usernameLower), { email: user.email, uid: user.uid });
+                batch.update(doc(fbDb, 'clubData', 'members'), { items: arrayUnion({ ...memberRecord, email: user.email }) });
+                await batch.commit();
+            },
 // ================= ROLE LOOKUP (roles/{uid}) - READ-ONLY FROM THE CLIENT =================
             // roles/{uid} is the ONLY source of authorization truth. It is created from the Firebase
             // Console (Main Admin) or by the Main Admin, and the Firestore Rules reject every other
@@ -2782,6 +2803,11 @@
                 try { await withTimeout(usernameIndexPromise, 8000, 'Username lookup timed out'); } catch (idxErr) { /* handled below */ }
                 email = resolveLoginEmail(identifier);
             }
+            if (!email && !identifier.includes('@')) {
+                // Fallback: the per-username claim made at registration works even before an Admin has
+                // refreshed the shared username index.
+                try { await ensureFirebaseReady(); email = await window.fb.lookupUsername(identifier); } catch (claimErr) { /* handled below */ }
+            }
             if (!email) {
                 showAuthMessage(usernameIndexLoaded
                     ? 'No account found with that username or email.'
@@ -2813,11 +2839,13 @@
                 // Admin can write (enforced by Firestore Rules) - never from the members array or the form.
                 const verifiedRole = await window.fb.getMyRole();
                 const signedInEmail = (window.fb.auth.currentUser && window.fb.auth.currentUser.email) || email;
+                let rosterLoadFailed = false;
                 const loadClubData = async () => {
                     try {
                         await withTimeout(loadClubDataFromFirestore(), 20000, 'Loading club data timed out');
                         normalizeMemberRecords();
                     } catch (loadErr) {
+                        rosterLoadFailed = true;
                         console.error('Could not refresh club data after sign-in - using what is locally available.', loadErr);
                     }
                 };
@@ -2841,7 +2869,9 @@
                     }
                 }
                 if (!account) {
-                    showAuthMessage('Signed in, but no matching member record was found. Please contact an Administrator.', 'error');
+                    showAuthMessage(rosterLoadFailed
+                        ? 'Signed in, but your account data could not be loaded. Please check your connection and try again.'
+                        : 'Your login exists but no member record was found - a registration may not have finished. Please contact an Administrator.', 'error');
                     try { await window.fb.signOutUser(); } catch (so) { /* ignore */ }
                     return;
                 }
@@ -2882,6 +2912,32 @@
         // the form actually submits.
         let regAvatarDataUrl = null;
 
+        // Photos are shrunk to a small JPEG before they are ever stored: every member record lives in ONE
+        // shared Firestore document (1 MB limit), so an unbounded upload could break the app for everyone.
+        function downscaleImageFile(file, maxDim, quality) {
+            return new Promise((resolve, reject) => {
+                if (!file.type || file.type.indexOf('image/') !== 0) return reject(new Error('not-an-image'));
+                const reader = new FileReader();
+                reader.onerror = () => reject(reader.error || new Error('read-failed'));
+                reader.onload = () => {
+                    const img = new Image();
+                    img.onerror = () => reject(new Error('bad-image'));
+                    img.onload = () => {
+                        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.max(1, Math.round(img.width * scale));
+                        canvas.height = Math.max(1, Math.round(img.height * scale));
+                        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                        const out = canvas.toDataURL('image/jpeg', quality);
+                        if (out.length > 120000) return reject(new Error('too-large'));
+                        resolve(out);
+                    };
+                    img.src = reader.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
         function handleRegAvatarUpload(e) {
             const file = e.target.files && e.target.files[0];
             const preview = document.getElementById('regAvatarPreview');
@@ -2891,15 +2947,17 @@
                 resetRegAvatarUpload();
                 return;
             }
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                regAvatarDataUrl = evt.target.result;
+            downscaleImageFile(file, 256, 0.82).then(dataUrl => {
+                regAvatarDataUrl = dataUrl;
                 preview.src = regAvatarDataUrl;
                 preview.classList.remove('hidden');
                 placeholderIcon.classList.add('hidden');
                 fileLabel.textContent = file.name.length > 24 ? file.name.slice(0, 21) + '...' : file.name;
-            };
-            reader.readAsDataURL(file);
+            }).catch(err => {
+                console.error('Could not use the chosen profile photo:', err);
+                resetRegAvatarUpload();
+                showAuthMessage('That photo could not be used. Please choose a normal JPG or PNG image.', 'error');
+            });
         }
 
         function resetRegAvatarUpload() {
@@ -2936,6 +2994,21 @@
             }
         }
 
+        // Undoes a half-finished registration: removes the just-created Firebase Auth account (which also
+        // signs the browser out) so the email is free to register again. Returns true if it was removed.
+        async function rollbackFailedRegistration() {
+            try {
+                await window.fb.deleteCurrentUser();
+                return true;
+            } catch (cleanupErr) {
+                console.error('Could not remove the orphaned Auth account after a failed registration:', cleanupErr);
+                try { await window.fb.signOutUser(); } catch (e) { /* ignore */ }
+                return false;
+            }
+        }
+
+        const RESERVED_USERNAMES = ['admin', 'administrator', 'root', 'system', 'support', 'mainadmin', 'iss'];
+
         async function handleRegisterSubmitCore(e) {
             e.preventDefault();
             const name = document.getElementById('regName').value.trim();
@@ -2945,14 +3018,14 @@
             const password = document.getElementById('regPassword').value;
             const passwordConfirm = document.getElementById('regPasswordConfirm').value;
 
-            // Explicit required-field checks first, with a clear prompt naming exactly what's
-            // missing — don't rely only on native browser validation, since the avatar file
-            // input is visually hidden (browsers skip constraint validation on hidden fields)
-            // and a mobile keyboard can otherwise submit a blank field without the native
-            // tooltip ever showing.
+            // Explicit required-field checks first, with a clear prompt naming exactly what's missing.
             if (!name) {
                 showAuthMessage('Please enter your full name.', 'error');
                 document.getElementById('regName').focus();
+                return;
+            }
+            if (name.length > 100) {
+                showAuthMessage('Your name is too long (100 characters maximum).', 'error');
                 return;
             }
             if (!email) {
@@ -2970,6 +3043,17 @@
                 document.getElementById('regUsername').focus();
                 return;
             }
+            const usernameLower = username.toLowerCase();
+            if (!/^[a-z0-9._-]{3,30}$/.test(usernameLower)) {
+                showAuthMessage('Username must be 3-30 characters: letters, numbers, dot, dash or underscore only.', 'error');
+                document.getElementById('regUsername').focus();
+                return;
+            }
+            if (RESERVED_USERNAMES.includes(usernameLower)) {
+                showAuthMessage('That username is reserved. Please choose another.', 'error');
+                document.getElementById('regUsername').focus();
+                return;
+            }
             if (!password || !passwordConfirm) {
                 showAuthMessage('Please enter and confirm a password.', 'error');
                 document.getElementById(!password ? 'regPassword' : 'regPasswordConfirm').focus();
@@ -2983,155 +3067,148 @@
                 showAuthMessage('Password must be at least 6 characters long.', 'error');
                 return;
             }
-            const usernameLower = username.toLowerCase();
-            const usernameTaken = !!USERNAME_INDEX[usernameLower] || STATE.members.some(m => m.username && m.username.toLowerCase() === usernameLower);
-            const existingByEmail = STATE.members.find(m => m.email && m.email.toLowerCase() === email.toLowerCase());
-            if (usernameTaken) {
-                showAuthMessage('That username is already taken. Please choose another.', 'error');
-                return;
-            }
-            if (existingByEmail) {
-                // Give a status-specific prompt instead of one generic message, so someone who
-                // already registered knows exactly what's going on with their account.
-                const existingStatus = getAccountStatus(existingByEmail);
-                const dupMessage = existingStatus === 'pending'
-                    ? 'You already have a registration with this email that is still waiting for Admin approval. Please wait for it to be reviewed — there is no need to register again.'
-                    : existingStatus === 'rejected'
-                        ? 'A previous registration with this email was rejected. Please contact an Administrator instead of registering again.'
-                        : existingStatus === 'disabled'
-                            ? 'This email belongs to an account that has been disabled. Please contact an Administrator.'
-                            : 'An account with that email already exists. Please log in instead.';
-                showAuthMessage(dupMessage, 'error');
-                return;
-            }
 
             const submitBtn = e.target.querySelector('button[type="submit"]');
             if (submitBtn) submitBtn.disabled = true;
-
             try {
                 await ensureFirebaseReady();
-                await window.fb.register(email, password);
-            } catch (err) {
-                console.error('Registration error:', err);
-                const msg = err.code === 'auth/email-already-in-use'
-                    ? 'An account with that email already exists. Please log in instead.'
-                    : 'Could not create your account right now. Please check your connection and try again.';
-                showAuthMessage(msg, 'error');
-                if (submitBtn) submitBtn.disabled = false;
-                return;
-            }
-            if (submitBtn) submitBtn.disabled = false;
 
-            // Now signed in — pull down the real, protected roster before adding this member,
-            // so saving 'members' below doesn't overwrite anyone else's data with whatever
-            // was only available locally pre-login.
-            try {
-                await loadClubDataFromFirestore();
-                normalizeMemberRecords();
-            } catch (loadErr) {
-                console.error('Could not refresh the roster before registering — continuing with what is locally available.', loadErr);
-            }
-
-            const newId = 'm' + (STATE.members.length + 1) + '_' + Date.now().toString().slice(-4);
-            const newMember = {
-                id: newId,
-                name: name,
-                username: username,
-                authRole: 'member', // never client-chosen; real authority is roles/{uid}
-                // Self-registration can never request Senior/Instructor status — that
-                // identification is set later by an Admin, from the member editor only.
-                memberType: 'member',
-                role: 'Member / New Student',
-                // New self-registrations always require Admin review before they can sign in —
-                // self-registration can never request a role.
-                accountStatus: 'pending',
-                belt: 'White Belt',
-                beltCode: 'white',
-                danLevel: 0,
-                dob: '',
-                gender: 'Unspecified',
-                phone: phone || 'Not Provided',
-                email: email,
-                address: 'Not Provided',
-                emergencyContactName: 'Not Provided',
-                emergencyContactRelation: 'Not Provided',
-                emergencyPhone: 'Not Provided',
-                kukkiwonId: 'Pending Registration',
-                branch: 'Main Hombu Branch',
-                weightClass: 'Not Assigned',
-                joinDate: new Date().toISOString().split('T')[0],
-                status: 'Active',
-                avatar: regAvatarDataUrl || '',
-                medical: 'None',
-                emergencyContact: 'Not Provided',
-                bio: '',
-                directoryPrivacy: defaultDirectoryPrivacy(),
-                // New self-registered members must complete their full profile on first login.
-                profileComplete: false
-            };
-
-            STATE.members.push(newMember);
-            resetRegAvatarUpload();
-            recordActivity('Registered New Account', newMember, `${newMember.name} self-registered as a new Member.`, newMember);
-
-            // IMPORTANT: do not swallow a Firestore permission error here. Firebase Auth has
-            // already created the login account, but the registration is not complete until the
-            // pending member record is actually persisted.
-            try {
-                await persistCollectionStrict('members');
-            } catch (memberSaveErr) {
-                console.error('Could not save the pending member record:', memberSaveErr);
-                STATE.members = STATE.members.filter(m => m !== newMember);
-                // The Firebase Auth account was already created above but the matching Firestore
-                // record just failed to save — left alone, that account would be an orphaned
-                // credential the person could never register again with (auth/email-already-in-use)
-                // and could never sign into either (no member record). Delete it so the email is
-                // immediately free to try registering again. Deleting also signs the browser out,
-                // so no separate signOutUser() call is needed on that path.
-                let rolledBack = false;
-                try {
-                    await window.fb.deleteCurrentUser();
-                    rolledBack = true;
-                } catch (cleanupErr) {
-                    console.error('Could not remove the orphaned Auth account after a failed registration:', cleanupErr);
-                    try { await window.fb.signOutUser(); } catch (e) { /* ignore */ }
+                // ---- Step 1: duplicate-username check using only PUBLIC data (the roster is not readable
+                // yet). This avoids creating a login account for a name that is obviously taken. The real,
+                // race-proof guarantee is the create-only username claim inside completeRegistration().
+                let claimedBy = null;
+                try { claimedBy = await window.fb.lookupUsername(usernameLower); } catch (lookupErr) { /* verified again at the end */ }
+                if (USERNAME_INDEX[usernameLower] || claimedBy) {
+                    showAuthMessage('That username is already taken. Please choose another.', 'error');
+                    return;
                 }
-                const message = rolledBack
-                    ? formatFirestoreError(
-                        memberSaveErr,
-                        'Could not complete your registration. Please try again.',
-                        'Could not complete your registration due to a Firestore permissions issue. Please try again — this attempt has been fully cleared so you can use the same email.'
-                    )
-                    : formatFirestoreError(
-                        memberSaveErr,
-                        'Your login account was created, but the pending member record could not be saved. Please check Firebase and try again.'
-                    );
-                showAuthMessage(message, 'error');
+
+                // ---- Step 2: create the Firebase Auth account (Auth itself guarantees unique emails). ----
+                try {
+                    await window.fb.register(email, password);
+                } catch (err) {
+                    console.error('Registration error:', err);
+                    const code = (err && err.code) || '';
+                    const msg = code === 'auth/email-already-in-use'
+                        ? 'An account with that email already exists. If you registered before, your account may still be waiting for Admin approval - otherwise please log in.'
+                        : code === 'auth/weak-password'
+                            ? 'That password is too weak. Please use at least 6 characters.'
+                            : code === 'auth/invalid-email'
+                                ? 'Please enter a valid email address.'
+                                : 'Could not create your account right now. Please check your connection and try again.';
+                    showAuthMessage(msg, 'error');
+                    return;
+                }
+
+                // From here on an Auth account exists. EVERY failure below must roll it back.
+                const failAndRollback = async (message) => {
+                    const rolledBack = await rollbackFailedRegistration();
+                    showAuthMessage(message + (rolledBack ? '' : ' (If you cannot register again with this email, please contact an Administrator.)'), 'error');
+                };
+
+                // ---- Step 3: now signed in - read the roster for a second, fuller duplicate check. ----
+                let rosterLoaded = true;
+                try {
+                    await loadClubDataFromFirestore();
+                    normalizeMemberRecords();
+                } catch (loadErr) {
+                    rosterLoaded = false;
+                    console.error('Could not read the roster before registering - the atomic username claim will still protect against duplicates.', loadErr);
+                }
+                if (rosterLoaded) {
+                    if (STATE.members.some(m => m.username && m.username.toLowerCase() === usernameLower)) {
+                        await failAndRollback('That username is already taken. Please choose another.');
+                        return;
+                    }
+                    const existingByEmail = STATE.members.find(m => m.email && m.email.toLowerCase() === email.toLowerCase());
+                    if (existingByEmail) {
+                        const existingStatus = getAccountStatus(existingByEmail);
+                        await failAndRollback(existingStatus === 'pending'
+                            ? 'You already have a registration with this email that is still waiting for Admin approval. There is no need to register again.'
+                            : existingStatus === 'rejected'
+                                ? 'A previous registration with this email was rejected. Please contact an Administrator instead of registering again.'
+                                : existingStatus === 'disabled'
+                                    ? 'This email belongs to an account that has been disabled. Please contact an Administrator.'
+                                    : 'An account with that email already exists. Please log in instead.');
+                        return;
+                    }
+                }
+
+                // ---- Step 4: build the record. Self-registration can ONLY ever be a pending Member. ----
+                const newId = 'm' + (STATE.members.length + 1) + '_' + Date.now().toString().slice(-4);
+                const newMember = {
+                    id: newId,
+                    name: name,
+                    username: username,
+                    authRole: 'member',            // never client-chosen; real authority is roles/{uid}
+                    memberType: 'member',          // Senior/Instructor is set later by an Admin
+                    role: 'Member / New Student',
+                    accountStatus: 'pending',      // every self-registration needs Admin approval
+                    belt: 'White Belt',
+                    beltCode: 'white',
+                    danLevel: 0,
+                    dob: '',
+                    gender: 'Unspecified',
+                    phone: phone || 'Not Provided',
+                    email: email,
+                    address: 'Not Provided',
+                    emergencyContactName: 'Not Provided',
+                    emergencyContactRelation: 'Not Provided',
+                    emergencyPhone: 'Not Provided',
+                    kukkiwonId: 'Pending Registration',
+                    branch: 'Main Hombu Branch',
+                    weightClass: 'Not Assigned',
+                    joinDate: new Date().toISOString().split('T')[0],
+                    status: 'Active',
+                    avatar: regAvatarDataUrl || '',
+                    medical: 'None',
+                    emergencyContact: 'Not Provided',
+                    bio: '',
+                    directoryPrivacy: defaultDirectoryPrivacy(),
+                    // Already-normalized fields, so normalizeMemberRecords() never has to rewrite this record
+                    // (which would make later whole-roster saves look like "more than one record changed").
+                    archived: false,
+                    tournamentHistory: [],
+                    profileComplete: false
+                };
+
+                // ---- Step 5: ONE atomic write = username claim + pending member record. ----
+                try {
+                    await window.fb.completeRegistration(usernameLower, newMember);
+                } catch (saveErr) {
+                    console.error('Could not complete the registration:', saveErr);
+                    // Was it really a username race lost to someone else?
+                    let nowClaimedBy = null;
+                    try { nowClaimedBy = await window.fb.lookupUsername(usernameLower); } catch (e2) { /* ignore */ }
+                    const code = (saveErr && saveErr.code) || '';
+                    const message = nowClaimedBy && nowClaimedBy.toLowerCase() !== email.toLowerCase()
+                        ? 'That username was just taken by someone else. Please choose another.'
+                        : code === 'not-found'
+                            ? 'Registration is not open yet - the club has not been set up. Please contact an Administrator.'
+                            : formatFirestoreError(
+                                saveErr,
+                                'Could not complete your registration. Please try again.',
+                                'Could not complete your registration due to a permissions issue. Please try again with a shorter name or smaller photo, or contact an Administrator.'
+                            );
+                    await failAndRollback(message);
+                    return;
+                }
+
+                // Registered. Record it (in memory) and sign out - the account is 'pending' until an Admin approves it.
+                recordActivity('Registered New Account', newMember, `${newMember.name} self-registered as a new Member.`, newMember);
+                resetRegAvatarUpload();
+                try { await window.fb.signOutUser(); } catch (so) { /* ignore */ }
+                document.getElementById('registerForm').reset();
+                switchAuthTab('login');
+                showAuthMessage('Successfully created! Please wait for Admin approval.', 'success');
+                appDialog({
+                    title: 'Account created!',
+                    message: 'Your registration was sent successfully.\nPlease wait for Admin approval — you can sign in as soon as it is approved.',
+                    icon: 'success', hideCancel: true, confirmText: 'Got it'
+                });
+            } finally {
                 if (submitBtn) submitBtn.disabled = false;
-                return;
             }
-
-            // The username index is only a login convenience. If its shared public document is
-            // temporarily blocked, the member record is still safely stored and the user can
-            // log in with their email.
-            try { await saveUsernameIndex(); } catch (indexErr) {
-                console.error('Could not save username index after registration:', indexErr);
-            }
-            // NOTE: no roles/{uid} document is written here. A missing role document means 'member', and the
-            // Firestore Rules do not allow anyone to create their own role document.
-
-            // New registrations are 'pending' until an Admin reviews them — sign this browser
-            // back out immediately (window.fb.register signs the new account in) rather than
-            // letting them straight into the app, and show a clear message explaining why.
-            try { await window.fb.signOutUser(); } catch (e) { /* ignore */ }
-            document.getElementById('registerForm').reset();
-            switchAuthTab('login');
-            showAuthMessage('Successfully created! Please wait for Admin approval.', 'success');
-            appDialog({
-                title: 'Account created!',
-                message: 'Your registration was sent successfully.\nPlease wait for Admin approval — you can sign in as soon as it is approved.',
-                icon: 'success', hideCancel: true, confirmText: 'Got it'
-            });
         }
 
         // isResumedSession is true when this login came from an existing Firebase Auth
@@ -3453,7 +3530,7 @@
                                 </h4>
                                 <div>
                                     <label class="text-[10px] font-bold text-gray-400 uppercase">Email Address *</label>
-                                    <input type="email" id="cpEmail" required value="${member.email || ''}" class="${inputClass}">
+                                    <input type="email" id="cpEmail" required readonly value="${member.email || ''}" class="${inputClass}">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-gray-400 uppercase">Phone Number *</label>
@@ -3671,7 +3748,8 @@
             member.name = document.getElementById('cpName').value.trim();
             member.dob = document.getElementById('cpDob').value;
             member.gender = document.getElementById('cpGender').value;
-            member.email = document.getElementById('cpEmail').value.trim();
+            // member.email is deliberately NOT editable here: it must always equal the Firebase login email,
+            // otherwise the account could no longer be matched at sign-in.
             member.phone = document.getElementById('cpPhone').value.trim();
             member.address = document.getElementById('cpAddress').value.trim();
             member.emergencyContactName = document.getElementById('cpEmergName').value.trim();
@@ -3715,7 +3793,14 @@
 
             // Save the completed profile — including Personal Information and Tournament
             // History — to Firestore using the app's existing member persistence path.
-            await persistCollection('members');
+            try {
+                await persistCollectionStrict('members');
+            } catch (saveErr) {
+                console.error('Could not save the completed profile:', saveErr);
+                member.profileComplete = false;
+                showToastNotification('Could not save your profile right now. Please check your connection and try again.');
+                return;
+            }
 
             closeModal();
             populateUserSelector();
@@ -6992,7 +7077,14 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const oldStatus = getAccountStatus(member);
             member.accountStatus = newStatus;
             recordActivity('Account Status Changed', member, `${member.name}'s account status changed from ${accountStatusMeta(oldStatus).label} to ${meta.label}.`);
-            persistCollection('members');
+            try {
+                await persistCollectionStrict('members');
+            } catch (saveErr) {
+                console.error('Could not save the account status change:', saveErr);
+                member.accountStatus = oldStatus;
+                showToastNotification('Could not save the status change. Please try again.');
+                return;
+            }
 
             closeModal();
             populateUserSelector();
@@ -10254,7 +10346,9 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 emergencyContact: 'Emergency Contact (+63 922 000 0000)',
                 directoryPrivacy: defaultDirectoryPrivacy(),
                 // Admin-registered members must also complete their full profile on first login.
-                profileComplete: false
+                profileComplete: false,
+                archived: false,
+                tournamentHistory: []
             };
             STATE.members.push(newMember);
 
