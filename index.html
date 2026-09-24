@@ -4143,9 +4143,8 @@
                     items: [
                         { id: 'credentials', label: 'ID Passes', icon: 'fa-address-card' },
                         { id: 'achievements', label: 'Medals', icon: 'fa-trophy' },
-                        { id: 'tournaments', label: 'Tournaments', icon: 'fa-fire' },
                         { id: 'archive', label: 'Archive', icon: 'fa-box-archive', badge: archivedMembers().length },
-                        { id: 'club-content', label: 'About Page Content', icon: 'fa-file-lines' },
+                        { id: 'club-content', label: 'Admin Panel', icon: 'fa-file-lines' },
                         { id: 'privacy-settings', label: 'Privacy', icon: 'fa-lock' },
                         { id: 'activity-log', label: 'Activity Log', icon: 'fa-file-pen', badge: STATE.activityLog.length }
                     ]
@@ -4782,7 +4781,7 @@
                 case 'credentials': renderCredentialsView(main); break;
                 case 'archive': renderArchiveView(main); break;
                 case 'achievements': renderAchievementsView(main); break;
-                case 'tournaments': renderTournamentsView(main); break;
+                case 'tournaments': renderClubContentView(main); break; // Tournaments now live inside the Admin Panel
                 case 'certificates': renderCertificatesView(main); break;
                 case 'announcements': renderAnnouncementsView(main); break;
                 case 'club-content': renderClubContentView(main); break;
@@ -7898,7 +7897,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             `;
         }
 
-        function renderTournamentsView(container) {
+        function tournamentsBodyHtml() {
             const f = STATE.tournamentFilters;
             const isAdmin = STATE.currentRole === 'admin';
 
@@ -7915,25 +7914,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
 
             const filtersActive = f.search || f.year !== 'All' || f.status !== 'All' || f.type !== 'All';
 
-            const html = `
-                <div class="view-shell animate-rise">
-                    <div class="hero-band flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                        <div class="hero-figure"></div>
-                        <div class="flex items-start gap-4 min-w-0">
-                            <div class="hero-ico shrink-0"><i class="fa-solid fa-fire"></i></div>
-                            <div class="min-w-0">
-                                <p class="eyebrow">Competition Circuit</p>
-                                <h2 class="hero-title mt-1">Tournaments &amp; Championships</h2>
-                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">Registrations, divisions, brackets and results across local, national and international competition.</p>
-                            </div>
-                        </div>
-                        ${isAdmin ? `
-                            <button onclick="openAddTournamentModal()" class="px-4 py-2 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center">
-                                <i class="fa-solid fa-plus mr-2"></i> Add Tournament
-                            </button>
-                        ` : ''}
-                    </div>
-
+            return `
                     ${tournamentSpotlightHtml()}
 
                     <!-- Search & Filters -->
@@ -7995,14 +7976,20 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                             </div>
                         `).join('') : '<p class="text-xs text-gray-500 italic col-span-2 text-center py-10">No tournaments match the current search/filters.</p>'}
                     </div>
-                </div>
             `;
-            container.innerHTML = html;
+        }
 
-            // Restore focus to the search box after a live re-render so typing isn't interrupted
+        // Standalone renderer (only used by the legacy member "my-tournaments" view now).
+        function renderTournamentsView(container) {
+            container.innerHTML = `<div class="view-shell animate-rise">${tournamentsBodyHtml()}</div>`;
+            restoreTournamentSearchFocus();
+        }
+
+        // Restores focus to the search box after a live re-render so typing isn't interrupted.
+        function restoreTournamentSearchFocus() {
             if (document.activeElement === document.body || document.activeElement === null) {
                 const input = document.getElementById('tourSearchInput');
-                if (input && f.search) {
+                if (input && STATE.tournamentFilters.search) {
                     input.focus();
                     const v = input.value;
                     input.value = '';
@@ -8011,10 +7998,22 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             }
         }
 
+        // Re-renders whichever page currently hosts the tournaments list (the Admin Panel),
+        // keeping the scroll position so filtering doesn't jump the page back to the top.
+        function rerenderTournamentsArea() {
+            const main = document.getElementById('mainViewport');
+            if (!main) return;
+            const keepScroll = main.scrollTop;
+            if (STATE.currentView === 'club-content' || STATE.currentView === 'tournaments') renderClubContentView(main);
+            else renderTournamentsView(main);
+            main.scrollTop = keepScroll;
+            restoreTournamentSearchFocus();
+        }
+
         function updateTournamentFilter(key, value) {
             STATE.tournamentFilters[key] = value;
             const shouldRefocus = key === 'search';
-            renderWithoutFlicker('mainViewport', () => renderTournamentsView(document.getElementById('mainViewport')));
+            renderWithoutFlicker('mainViewport', rerenderTournamentsArea);
             if (shouldRefocus) {
                 const input = document.getElementById('tourSearchInput');
                 if (input) {
@@ -8029,7 +8028,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
 
         function resetTournamentFilters() {
             STATE.tournamentFilters = { search: '', year: 'All', status: 'All', type: 'All' };
-            renderTournamentsView(document.getElementById('mainViewport'));
+            rerenderTournamentsArea();
         }
 
         // ===== Add / Edit / Delete Tournament =====
@@ -9213,8 +9212,8 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                             <div class="hero-ico shrink-0"><i class="fa-solid fa-file-lines"></i></div>
                             <div class="min-w-0">
                                 <p class="eyebrow">Admin Panel</p>
-                                <h2 class="hero-title mt-1">About Page Content</h2>
-                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">Everything here is shown on the First / Login page, before anyone signs in. Save any section below and it appears there automatically.</p>
+                                <h2 class="hero-title mt-1">Club Content &amp; Tournaments</h2>
+                                <p class="text-xs text-gray-400 mt-2 max-w-2xl leading-relaxed">The About sections below are shown on the First / Login page, before anyone signs in — save any of them and it appears there automatically. Tournaments are managed at the bottom of this page.</p>
                             </div>
                         </div>
                     </div>
@@ -9229,6 +9228,15 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                     </div>
 
                     ${section('Visit / Get In Touch', 'fa-location-dot', 'openEditClubContactModal', contactBody)}
+
+                    <!-- Tournaments (moved here from its own sidebar page) -->
+                    <div class="flex items-center justify-between gap-3 border-b border-brand-border/60 pb-3 pt-4">
+                        <h3 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-trophy" style="color:var(--accent)"></i> Tournaments</h3>
+                        <button onclick="openAddTournamentModal()" class="shrink-0 px-4 py-2 bg-brand-red hover:bg-brand-hover text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center">
+                            <i class="fa-solid fa-plus mr-2"></i> Add Tournament
+                        </button>
+                    </div>
+                    ${tournamentsBodyHtml()}
                 </div>
             `;
             container.innerHTML = html;
