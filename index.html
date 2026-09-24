@@ -5330,7 +5330,8 @@
         function postImages(p) { return Array.isArray(p.images) && p.images.length ? p.images : (p.image ? [p.image] : []); }
 
         // One post card — used both in the About-page preview grid and the full Posts view.
-        // Fixed-height image box (object-cover) + a tight text block keeps every card the
+        // Fixed-height image box (object-contain: the WHOLE photo is shown, letterboxed on the dark
+        // background, never cropped) + a tight text block keeps every card the
         // same footprint so nothing ever overflows its own border or overlaps a neighbor.
         function postCardHtml(p, compact) {
             const author = postAuthor(p);
@@ -5339,7 +5340,7 @@
             return `
                 <div onclick="openPostDetail('${p.id}')" class="glass-panel rounded-2xl border border-brand-border overflow-hidden cursor-pointer hover:border-brand-red/60 hover:bg-white/[0.02] transition-all flex flex-col" title="Click to view post">
                     <div class="w-full ${imgH} shrink-0 bg-brand-dark overflow-hidden relative">
-                        ${imgs[0] ? `<img src="${imgs[0]}" alt="" class="w-full h-full object-cover" loading="lazy">` : `<div class="w-full h-full flex items-center justify-center"><i class="fa-solid fa-image text-xl text-gray-600"></i></div>`}
+                        ${imgs[0] ? `<img src="${imgs[0]}" alt="" class="w-full h-full object-contain" loading="lazy">` : `<div class="w-full h-full flex items-center justify-center"><i class="fa-solid fa-image text-xl text-gray-600"></i></div>`}
                         ${imgs.length > 1 ? `<span class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-black/60 text-white flex items-center gap-1"><i class="fa-solid fa-images"></i>${imgs.length}</span>` : ''}
                     </div>
                     <div class="p-2 sm:p-2.5 flex flex-col gap-1 min-w-0">
