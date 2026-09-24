@@ -86,8 +86,8 @@
         } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
         import {
             getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot,
-            collection, getDocs,
-            writeBatch, arrayUnion
+            collection, getDocs, query, orderBy, limit, where,
+            writeBatch, arrayUnion, arrayRemove, updateDoc, increment
         } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
         // Your web app's Firebase configuration (project: taekwando-5bae0)
@@ -120,9 +120,9 @@
         // Thin wrapper so the classic script below can call Firebase without needing
         // to be a module itself. All protected club data lives under the "clubData"
         // collection, one document per STATE slice (members, announcements, achievements,
-        // etc.) — locked to signed-in users by Firestore rules. The ONLY data readable before sign-in
-        // is one tiny document per username (usernames/{name} = { email }), fetched by exact name so the
-        // login screen can turn a username into an email without ever exposing the member list.
+        // etc.) — locked to signed-in users by Firestore rules. "publicIndex" holds only
+        // the small, non-sensitive lookups (like username -> email) that must be readable
+        // before someone has signed in yet, e.g. to resolve a username at the login screen.
         window.fb = {
             auth: fbAuth,
             db: fbDb,
@@ -184,71 +184,66 @@
             // each post into its own document under clubData/posts/items/{postId} means each
             // post only has to fit under 1MB by itself, and one oversized post can never block
             // or wipe out any other post.
+            // Only the NEWEST 60 posts are loaded/listened to (ordered by the `date` field), instead of every post
+            // ever made with all of its photos on every login. Posts without a `date` field are not returned.
             loadAllPostDocs: async () => {
-                const snap = await getDocs(collection(fbDb, 'clubData', 'posts', 'items'));
+                const snap = await getDocs(query(collection(fbDb, 'clubData', 'posts', 'items'), orderBy('date', 'desc'), limit(60)));
                 const items = [];
                 snap.forEach(d => items.push({ id: d.id, ...d.data() }));
                 return items;
             },
             savePostDoc: (post) => setDoc(doc(fbDb, 'clubData', 'posts', 'items', post.id), post),
             deletePostDoc: (postId) => deleteDoc(doc(fbDb, 'clubData', 'posts', 'items', postId)),
-            watchPostDocs: (cb) => onSnapshot(collection(fbDb, 'clubData', 'posts', 'items'), cb),
-            // READ-ONLY legacy fallback. publicIndex/usernameIndex is retired (it exposed every member's email
-            // to the public) and the app never writes it any more - see the usernames/{name} claims below.
+            watchPostDocs: (cb) => onSnapshot(query(collection(fbDb, 'clubData', 'posts', 'items'), orderBy('date', 'desc'), limit(60)), cb),
+            // Reactions are ATOMIC field operations: they never re-upload the photos and two people reacting at
+            // once cannot overwrite each other. The Security Rules only accept exactly these shapes.
+            likePostDoc: (postId, uid, like) => updateDoc(doc(fbDb, 'clubData', 'posts', 'items', postId), { likes: like ? arrayUnion(uid) : arrayRemove(uid) }),
+            viewPostDoc: (postId) => updateDoc(doc(fbDb, 'clubData', 'posts', 'items', postId), { views: increment(1) }),
+            updatePostFields: (postId, fields) => updateDoc(doc(fbDb, 'clubData', 'posts', 'items', postId), fields),   // Admin conversion only
+            currentUid: () => fbAuth.currentUser ? fbAuth.currentUser.uid : null,
+            lookupUsernameUid: async (usernameLower) => {
+                const snap = await getDoc(doc(fbDb, 'usernames', usernameLower));
+                return snap.exists() ? (snap.data().uid || null) : null;
+            },
+            // ================= LOG ENTRIES (ONE Firestore doc per entry) =================
+            // loginHistory (attendance) and activityLog used to be single array documents that every client
+            // rewrote in full: entries were lost under concurrency and the document grew toward the 1 MB limit.
+            // Each entry is now its own document under clubData/{kind}/items/{entryId}, like posts.
+            //   loadLogDocs: { userId, max }  -> that member's own entries (no index needed)
+            //                { orderField, max } -> newest `max` entries (single-field index, automatic)
+            loadLogDocs: async (kind, opts) => {
+                if (kind !== 'loginHistory' && kind !== 'activityLog') throw new Error('Unknown log kind: ' + kind);
+                opts = opts || {};
+                const col = collection(fbDb, 'clubData', kind, 'items');
+                const q = opts.userId
+                    ? query(col, where('userId', '==', opts.userId), limit(opts.max || 1000))
+                    : query(col, orderBy(opts.orderField, 'desc'), limit(opts.max || 500));
+                const snap = await getDocs(q);
+                const items = [];
+                snap.forEach(d => items.push({ ...d.data(), id: d.id }));
+                return items;
+            },
+            // JSON round-trip drops `undefined` values, which Firestore refuses to store.
+            saveLogDoc: (kind, entry) => {
+                if (kind !== 'loginHistory' && kind !== 'activityLog') throw new Error('Unknown log kind: ' + kind);
+                return setDoc(doc(fbDb, 'clubData', kind, 'items', entry.id), JSON.parse(JSON.stringify(entry)));
+            },
+            // Idempotent bulk copy (same ids overwrite themselves) used by the one-time legacy migration.
+            saveLogDocsBatch: async (kind, entries) => {
+                if (kind !== 'loginHistory' && kind !== 'activityLog') throw new Error('Unknown log kind: ' + kind);
+                for (let i = 0; i < entries.length; i += 400) {
+                    const batch = writeBatch(fbDb);
+                    entries.slice(i, i + 400).forEach(e => batch.set(doc(fbDb, 'clubData', kind, 'items', e.id), JSON.parse(JSON.stringify(e))));
+                    await batch.commit();
+                }
+            },
             loadPublicDoc: (key) => getDoc(doc(fbDb, 'publicIndex', key)),
+            savePublicDoc: (key, data) => setDoc(doc(fbDb, 'publicIndex', key), data),
             // ================= REGISTRATION (atomic) =================
             // Public read of ONE username claim (usernames/{name} -> { email, uid }).
             lookupUsername: async (usernameLower) => {
                 const snap = await getDoc(doc(fbDb, 'usernames', usernameLower));
                 return snap.exists() ? (snap.data().email || null) : null;
-            },
-            // ---- Admin-side username claim helpers (the Firestore Rules reject all of these for non-Admins) ----
-            // Claims are create-only: an existing name is never overwritten, only released (deleted) and re-claimed.
-            // Returns 'created' | 'exists' (already this member's) | 'taken' (someone else's).
-            claimUsernameAsAdmin: async (usernameLower, email) => {
-                const ref = doc(fbDb, 'usernames', usernameLower);
-                const snap = await getDoc(ref);
-                if (snap.exists()) {
-                    return String(snap.data().email || '').toLowerCase() === String(email || '').toLowerCase() ? 'exists' : 'taken';
-                }
-                try {
-                    await setDoc(ref, { email: email });
-                } catch (err) {
-                    // Lost a race: the name was claimed between the read and the write.
-                    if ((await getDoc(ref)).exists()) return 'taken';
-                    throw err;
-                }
-                return 'created';
-            },
-            // Deletes a claim, but only if it points at this member's email (never someone else's).
-            releaseUsernameClaim: async (usernameLower, email) => {
-                if (!usernameLower) return false;
-                const ref = doc(fbDb, 'usernames', usernameLower);
-                const snap = await getDoc(ref);
-                if (!snap.exists()) return false;
-                if (email && String(snap.data().email || '').toLowerCase() !== String(email).toLowerCase()) return false;
-                await deleteDoc(ref);
-                return true;
-            },
-            // Atomic rename: release the old claim (if it is this member's) + create the new one, or neither.
-            // Returns 'renamed' | 'taken'.
-            renameUsernameClaim: async (oldLower, newLower, email) => {
-                const newRef = doc(fbDb, 'usernames', newLower);
-                if ((await getDoc(newRef)).exists()) return 'taken';
-                const batch = writeBatch(fbDb);
-                if (oldLower && oldLower !== newLower) {
-                    const oldRef = doc(fbDb, 'usernames', oldLower);
-                    const oldSnap = await getDoc(oldRef);
-                    if (oldSnap.exists() && String(oldSnap.data().email || '').toLowerCase() === String(email || '').toLowerCase()) batch.delete(oldRef);
-                }
-                batch.set(newRef, { email: email });
-                try {
-                    await batch.commit();
-                } catch (err) {
-                    if ((await getDoc(newRef)).exists()) return 'taken';
-                    throw err;
-                }
-                return 'renamed';
             },
             // Finishes a self-registration for the CURRENT signed-in user in ONE atomic batch:
             //   (1) claim the username (create-only: fails if anyone already owns it), and
@@ -295,28 +290,20 @@
                 const role = await window.fb.getMyRole();
                 if (role.authRole !== 'admin') throw new Error('Only a server-verified Admin can be provisioned.');
                 const email = user.email;
-                // Roster entry + login-name claim for a server-verified Admin (roles/{uid} said 'admin').
-                // The username is claimed in usernames/{name}; the retired public index is never written.
+                const indexRef = doc(fbDb, 'publicIndex', 'usernameIndex');
+                const indexSnap = await getDoc(indexRef);
+                const map = (indexSnap.exists() && indexSnap.data().map) ? { ...indexSnap.data().map } : {};
+                let username = String(email).split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '') || 'admin';
+                if (map[username] && String(map[username]).toLowerCase() !== email.toLowerCase()) username += '_admin';
                 const membersRef = doc(fbDb, 'clubData', 'members');
                 const membersSnap = await getDoc(membersRef);
                 const items = (membersSnap.exists() && Array.isArray(membersSnap.data().items)) ? membersSnap.data().items.slice() : [];
-                const existingIdx = items.findIndex(m => m.email && m.email.toLowerCase() === email.toLowerCase());
-                // Usernames must fit the claim format (3-30 chars of a-z 0-9 . _ -).
-                const fit = (u) => { let s = String(u || '').toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 30); while (s.length < 3) s += '_'; return s; };
-                const baseName = fit((existingIdx !== -1 && items[existingIdx].username) ? items[existingIdx].username : String(email).split('@')[0]);
-                let username = null;
-                let claimIsNew = false;
-                for (let n = 0; n < 6 && !username; n++) {
-                    const candidate = n === 0 ? baseName : fit(baseName.slice(0, 20) + '_admin' + (n > 1 ? n : ''));
-                    const claimSnap = await getDoc(doc(fbDb, 'usernames', candidate));
-                    if (!claimSnap.exists()) { username = candidate; claimIsNew = true; }
-                    else if (String(claimSnap.data().email || '').toLowerCase() === email.toLowerCase()) { username = candidate; }
-                }
-                if (!username) throw new Error('Could not find a free username for this Admin account.');
                 const record = { ...memberDraft, username: username, email: email, authRole: 'admin', accountStatus: 'approved', status: 'Active' };
-                if (existingIdx === -1) items.push(record); else items[existingIdx] = { ...items[existingIdx], ...record };
+                const idx = items.findIndex(m => m.email && m.email.toLowerCase() === email.toLowerCase());
+                if (idx === -1) items.push(record); else items[idx] = { ...items[idx], ...record };
                 await setDoc(membersRef, { items });
-                if (claimIsNew) await setDoc(doc(fbDb, 'usernames', username), { email: email, uid: user.uid });
+                map[username] = email;
+                await setDoc(indexRef, { map });
                 return { uid: user.uid, email };
             }
         };
@@ -2151,7 +2138,8 @@
         // document. Each post is its own document under clubData/posts/items/{postId}; see
         // persistPost(), deletePostRemote(), loadAllPosts() and the watchPostDocs realtime
         // listener further down.
-        const FIRESTORE_COLLECTION_KEYS = ['members', 'announcements', 'achievements', 'tournaments', 'certificates', 'promotions', 'loginHistory', 'activityLog'];
+        // NOTE: 'loginHistory' and 'activityLog' are intentionally NOT here any more: each entry is its own document (see LOG ENTRIES below).
+        const FIRESTORE_COLLECTION_KEYS = ['members', 'announcements', 'achievements', 'tournaments', 'certificates', 'promotions'];
 
         function collectionKeyToPayload(key) {
             if (key === 'privacySettings') return { settings: STATE.privacySettings };
@@ -2159,37 +2147,86 @@
             return { items: STATE[key] };
         }
 
-        async function persistCollection(key) {
-            try {
-                await persistCollectionStrict(key);
-                if (key === 'members' || key === 'achievements') {
-                    try { await syncPublicClubStats(); } catch (e) { /* best-effort only */ }
-                }
-            } catch (err) {
-                // Intentionally silent (console only): schedulePersist() fires this for every
-                // FIRESTORE_COLLECTION_KEYS entry on basically every render, regardless of the
-                // signed-in user's role. For a plain Member, most of these (tournaments,
-                // certificates, promotions, etc.) are admin-only by design per the Security
-                // Rules, so a permission-denied here is EXPECTED and not a real problem —
-                // alerting on it would spam every member on every page. Only explicit,
-                // user-initiated actions (like posts — see reportFirestoreFailure) should
-                // interrupt the user with an alert.
-                console.error('Firestore save failed for', key, err);
-            }
+        // ================= WRITE SAFETY (added by the data-architecture audit) =================
+        // 1) A collection is only ever written back if it was successfully READ (or seeded) first,
+        //    so a failed/timed-out read can no longer be "saved" as an empty array over real data.
+        // 2) A write is skipped when nothing changed since the last read/write (schedulePersist runs
+        //    after almost every render and used to rewrite all documents each time).
+        // 3) A payload that cannot fit in a Firestore document is refused with a clear error instead of
+        //    failing silently on the server.
+        // 4) Content that Firestore already rejected with permission-denied is not retried until it changes.
+        const SYNC_TRACK = { loaded: new Set(), lastJson: {}, deniedJson: {}, alertedJson: {} };
+        const FIRESTORE_SAFE_DOC_BYTES = 1000000;   // hard limit is 1,048,576; keep a margin for field-name overhead
+
+        function markCollectionSynced(key) {
+            SYNC_TRACK.loaded.add(key);
+            try { SYNC_TRACK.lastJson[key] = JSON.stringify(collectionKeyToPayload(key)); } catch (e) { /* ignore */ }
+            delete SYNC_TRACK.deniedJson[key];
         }
 
-        // Same persistence path, but intentionally lets the caller see a Firestore error.
-        // Registration uses this so a blocked Security Rule can never be reported as a
-        // successful registration when only Firebase Auth was created.
+        // Shrinks an image file to a JPEG data URL of at most maxChars characters, trying smaller
+        // sizes/qualities until it fits. Rejects with 'too-large' / 'not-an-image' otherwise.
+        async function compressImageToLimit(file, maxChars, firstDim) {
+            if (!file || !file.type || file.type.indexOf('image/') !== 0) throw new Error('not-an-image');
+            const attempts = [[firstDim || 1280, 0.72], [1024, 0.6], [800, 0.5], [640, 0.45]];
+            for (const [dim, quality] of attempts) {
+                const out = await compressImageFile(file, dim, quality);
+                if (out.length <= maxChars) return out;
+            }
+            throw new Error('too-large');
+        }
+
+        // Returns true if a write happened, false if there was nothing to write.
+        // Throws on any problem so callers that care (registration, certificates, avatar) can react.
         async function persistCollectionStrict(key) {
             await ensureFirebaseReady();
+            if (!SYNC_TRACK.loaded.has(key)) {
+                throw Object.assign(new Error(`"${key}" has not been loaded from Firestore yet, so it was not saved (this protects the server copy from being overwritten with empty data).`), { code: 'app/not-loaded' });
+            }
+            const json = JSON.stringify(collectionKeyToPayload(key));
+            if (json === SYNC_TRACK.lastJson[key]) return false;
+            const bytes = new Blob([json]).size;
+            if (bytes > FIRESTORE_SAFE_DOC_BYTES) {
+                throw Object.assign(new Error(`"${key}" is too large to save (${Math.round(bytes / 1024)} KB of about 1,000 KB allowed). Remove or shrink the largest photos or entries. Your latest change is NOT saved.`), { code: 'app/too-large' });
+            }
             try {
                 await window.fb.saveCollectionDoc(key, collectionKeyToPayload(key));
+                SYNC_TRACK.lastJson[key] = json;
+                return true;
             } catch (err) {
                 // Preserve the original Firebase error code/message so registration can
                 // distinguish permission-denied from network/authentication failures.
                 console.error(`Firestore strict save failed for ${key}:`, err);
                 throw err;
+            }
+        }
+
+        async function persistCollection(key) {
+            try {
+                // Skip content Firestore already refused (e.g. a Member's futile write to an admin-only
+                // collection) until it actually changes; this also avoids needless rule evaluations.
+                if (SYNC_TRACK.loaded.has(key) && SYNC_TRACK.deniedJson[key] !== undefined
+                    && SYNC_TRACK.deniedJson[key] === JSON.stringify(collectionKeyToPayload(key))) return;
+                const wrote = await persistCollectionStrict(key);
+                if (wrote && (key === 'members' || key === 'achievements')) {
+                    try { await syncPublicClubStats(); } catch (e) { /* best-effort only */ }
+                }
+            } catch (err) {
+                console.error('Firestore save failed for', key, err);
+                const code = String(err && err.code || '').toLowerCase();
+                if (code.includes('permission-denied')) {
+                    // EXPECTED for a plain Member on admin-only collections: stay silent, don't retry the same content.
+                    try { SYNC_TRACK.deniedJson[key] = JSON.stringify(collectionKeyToPayload(key)); } catch (e) { /* ignore */ }
+                } else if (code === 'app/too-large' || code.includes('invalid-argument')) {
+                    // Real data-loss risk: tell the user, once per distinct content.
+                    let cur = ''; try { cur = JSON.stringify(collectionKeyToPayload(key)); } catch (e) { /* ignore */ }
+                    if (SYNC_TRACK.alertedJson[key] !== cur) {
+                        SYNC_TRACK.alertedJson[key] = cur;
+                        appAlert(code === 'app/too-large' ? err.message
+                            : `Could not save "${key}" - the data is too large or invalid for Firestore. Your latest change is NOT saved.`);
+                    }
+                }
+                // app/not-loaded, network errors: console only (the next render retries automatically).
             }
         }
 
@@ -2216,8 +2253,10 @@
             try {
                 await ensureFirebaseReady();
                 await window.fb.savePostDoc(post);
+                return true;
             } catch (err) {
                 reportFirestoreFailure('post', err);
+                return false;
             }
         }
 
@@ -2225,8 +2264,10 @@
             try {
                 await ensureFirebaseReady();
                 await window.fb.deletePostDoc(postId);
+                return true;
             } catch (err) {
                 reportFirestoreFailure('post', err);
+                return false;
             }
         }
 
@@ -2255,33 +2296,194 @@
             return fallback || `Firestore error${err?.message ? `: ${err.message}` : '.'}`;
         }
 
+        // ================= LOG ENTRIES: ONE DOCUMENT PER ENTRY (audit step 2) =================
+        // Paths: clubData/loginHistory/items/{id}   (attendance / check-ins)
+        //        clubData/activityLog/items/{id}    (who changed what; Admin-readable only)
+        // Every entry is written once, when it happens, so there is no read-modify-write of a shared array and
+        // no growth toward the 1 MB document limit. Entries carry writerEmail (the Firebase Auth email of whoever
+        // wrote them) so the Security Rules can verify ownership, exactly like posts use authorEmail.
+        const LOG_KINDS = { loginHistory: 'loginTime', activityLog: 'timestamp' };
+        // How much history each role loads at login (reads are billed per document).
+        const LOG_LIMITS = { adminLoginHistory: 2000, adminActivityLog: 500, memberLoginHistory: 1000 };
+        // Set to true to let an Admin's browser run the one-time legacy move automatically at login.
+        const AUTO_MIGRATE_LEGACY_LOGS = false;
+        const LOG_QUEUE = { loginHistory: new Map(), activityLog: new Map() };   // id -> { entry, attempts }
+        const LOG_MAX_ATTEMPTS = 5;
+        let logFlushTimer = null;
+        let logRetryTimer = null;
+        let logFlushChain = Promise.resolve();
+        let legacyLogNoticeShown = false;
+
+        function newLogId(prefix) { return prefix + Date.now() + '_' + Math.random().toString(36).slice(2, 8); }
+        function currentAuthEmail() {
+            return (window.fb && window.fb.currentUserEmail && window.fb.currentUserEmail()) || '';
+        }
+
+        // Queues one entry (new or updated) for writing. Re-queueing the same id replaces the older queued version.
+        function queueLogWrite(kind, entry) {
+            LOG_QUEUE[kind].set(entry.id, { entry: entry, attempts: 0 });
+            clearTimeout(logFlushTimer);
+            logFlushTimer = setTimeout(() => { flushLogWrites(); }, 300);
+        }
+
+        function scheduleLogRetry() {
+            if (logRetryTimer) return;
+            logRetryTimer = setTimeout(() => { logRetryTimer = null; flushLogWrites(); }, 15000);
+        }
+
+        // Writes everything queued. Serialised, so overlapping calls never interleave. Never throws.
+        // Entries stay queued while signed out or offline; permission-denied entries are dropped (retrying cannot help).
+        function flushLogWrites() {
+            const run = async () => {
+                if (!(window.fb && window.fb.auth && window.fb.auth.currentUser)) return;
+                await ensureFirebaseReady();
+                for (const kind of Object.keys(LOG_QUEUE)) {
+                    const items = Array.from(LOG_QUEUE[kind].entries());
+                    await Promise.all(items.map(async ([id, item]) => {
+                        try {
+                            await window.fb.saveLogDoc(kind, item.entry);
+                            if (LOG_QUEUE[kind].get(id) === item) LOG_QUEUE[kind].delete(id);
+                        } catch (err) {
+                            const code = String(err && err.code || '').toLowerCase();
+                            item.attempts++;
+                            if (code.includes('permission-denied') || item.attempts >= LOG_MAX_ATTEMPTS) {
+                                console.error(`Dropping ${kind} entry ${id}:`, err);
+                                if (LOG_QUEUE[kind].get(id) === item) LOG_QUEUE[kind].delete(id);
+                            } else {
+                                console.warn(`Could not save ${kind} entry ${id} yet - will retry.`, err);
+                                scheduleLogRetry();
+                            }
+                        }
+                    }));
+                }
+            };
+            logFlushChain = logFlushChain.then(run).catch(err => console.error('Log flush failed:', err));
+            return logFlushChain;
+        }
+
+        function sortLogs(list, field) {
+            return list.sort((a, b) => String(b[field] || '').localeCompare(String(a[field] || '')));
+        }
+        // A reload must never drop entries that are still waiting to be written.
+        function mergeQueuedLogs(kind, list) {
+            const index = new Map(list.map((e, i) => [e.id, i]));
+            LOG_QUEUE[kind].forEach(item => {
+                if (index.has(item.entry.id)) list[index.get(item.entry.id)] = item.entry; else list.push(item.entry);
+            });
+            return list;
+        }
+
+        // Loads history into STATE. Admins: newest entries of both logs. Members: only their own check-ins
+        // (they never read the activity log). Until the one-time migration has been run, the old single-document
+        // history is merged in READ-ONLY so nothing appears to vanish.
+        async function loadLogHistory() {
+            await ensureFirebaseReady();
+            const role = await window.fb.getMyRole();
+            const isAdm = role.authRole === 'admin';
+            const email = currentAuthEmail().toLowerCase();
+            const me = STATE.members.find(m => m.email && m.email.toLowerCase() === email);
+
+            let migrated = false;
+            try {
+                const marker = await window.fb.loadCollectionDoc('logMigration');
+                migrated = !!(marker && marker.exists() && marker.data().done);
+            } catch (e) { /* treat as not migrated yet */ }
+
+            let logins = [];
+            let activity = null;   // null = leave the in-memory activity list alone
+            if (isAdm) {
+                const both = await Promise.all([
+                    window.fb.loadLogDocs('loginHistory', { orderField: 'loginTime', max: LOG_LIMITS.adminLoginHistory }),
+                    window.fb.loadLogDocs('activityLog', { orderField: 'timestamp', max: LOG_LIMITS.adminActivityLog })
+                ]);
+                logins = both[0]; activity = both[1];
+            } else if (me) {
+                logins = await window.fb.loadLogDocs('loginHistory', { userId: me.id, max: LOG_LIMITS.memberLoginHistory });
+            }
+
+            let legacyCount = 0;
+            if (!migrated && (isAdm || me)) {
+                try {
+                    for (const kind of (isAdm ? ['loginHistory', 'activityLog'] : ['loginHistory'])) {
+                        const snap = await window.fb.loadCollectionDoc(kind);
+                        let old = (snap && snap.exists() && Array.isArray(snap.data().items)) ? snap.data().items : [];
+                        if (!isAdm) old = old.filter(e => e && e.userId === me.id);
+                        legacyCount += old.length;
+                        const target = kind === 'loginHistory' ? logins : activity;
+                        const seen = new Set(target.map(e => e.id));
+                        old.forEach(e => { if (e && e.id && !seen.has(e.id)) target.push(e); });
+                    }
+                } catch (err) { console.error('Could not read the legacy history documents:', err); }
+            }
+
+            STATE.loginHistory = sortLogs(mergeQueuedLogs('loginHistory', logins), 'loginTime');
+            if (activity) STATE.activityLog = sortLogs(mergeQueuedLogs('activityLog', activity), 'timestamp');
+
+            if (isAdm && !migrated && legacyCount > 0) {
+                console.warn(`Legacy history found (${legacyCount} entries) and shown read-only. Run migrateLegacyLogHistory() once to move it.`);
+                if (AUTO_MIGRATE_LEGACY_LOGS) {
+                    migrateLegacyLogHistory().catch(err => console.error('Automatic legacy log migration failed:', err));
+                } else if (!legacyLogNoticeShown) {
+                    legacyLogNoticeShown = true;
+                    setTimeout(() => showToastNotification('Old check-in / activity history is not migrated yet. An Admin should run migrateLegacyLogHistory() in the browser console.'), 2500);
+                }
+            }
+        }
+
+        // ONE-TIME, Admin-only, explicit (never automatic unless AUTO_MIGRATE_LEGACY_LOGS is set).
+        // Copies the old clubData/loginHistory and clubData/activityLog arrays into per-entry documents.
+        // Safe to re-run (same ids overwrite themselves). The old documents are NOT deleted or changed.
+        // writerEmail is filled in from the member roster so members can later be limited to their own entries.
+        async function migrateLegacyLogHistory() {
+            if (!isAdmin()) throw new Error('Only an Admin can migrate the legacy history.');
+            await ensureFirebaseReady();
+            const emailById = {};
+            STATE.members.forEach(m => { if (m.id && m.email) emailById[m.id] = m.email; });
+            const summary = {};
+            for (const kind of Object.keys(LOG_KINDS)) {
+                const snap = await window.fb.loadCollectionDoc(kind);
+                const items = (snap && snap.exists() && Array.isArray(snap.data().items)) ? snap.data().items : [];
+                const usable = items.filter(e => e && typeof e.id === 'string' && e.id && e.id.indexOf('/') === -1);
+                const docs = usable.map(e => Object.assign({}, e, {
+                    writerEmail: e.writerEmail || emailById[kind === 'loginHistory' ? e.userId : e.editedById] || ''
+                }));
+                await window.fb.saveLogDocsBatch(kind, docs);
+                summary[kind] = { found: items.length, copied: docs.length, skipped: items.length - docs.length };
+            }
+            await window.fb.saveCollectionDoc('logMigration', { done: true, at: new Date().toISOString(), counts: summary });
+            await loadLogHistory();
+            renderSidebarNav();
+            renderView(STATE.currentView);
+            console.info('Legacy history migration finished:', summary);
+            return summary;
+        }
         async function persistAllCollections() {
             for (const key of [...FIRESTORE_COLLECTION_KEYS, 'privacySettings', 'clubProfile']) {
                 await persistCollection(key);
             }
+            await saveUsernameIndex();
         }
 
-        // ================= USERNAME -> EMAIL LOOKUP (one claim document per username) =================
-        // Firebase Auth signs in with an email, but people log in with a username, and that lookup has to
-        // work BEFORE anyone is signed in. It lives in one tiny document PER username:
-        //     usernames/{usernameLower} = { email[, uid] }
-        // Firestore Rules: anyone may read ONE claim by its exact name (no listing, so the member list can not
-        // be downloaded); a claim can only be CREATED, never overwritten - by the registrant during sign-up
-        // (atomic with their roster record) or by an Admin. Admins also release (delete) a claim when a
-        // username is renamed or a member is permanently deleted.
-        // The old shared publicIndex/usernameIndex document exposed EVERY member's email to the public. It is
-        // no longer written by this app; it is only read as a temporary fallback while old accounts migrate.
-        const USERNAME_RE = /^[a-z0-9._-]{3,30}$/;
-        // MIGRATION SWITCHES - once every member has a claim (an Admin has logged in with no warnings), set
-        // both to false and delete publicIndex/usernameIndex in the Firebase Console.
-        const LEGACY_PUBLIC_INDEX_FALLBACK = false;   // still read the old public index if a claim is missing
-        const USERNAME_CLAIM_BACKFILL = false;        // Admin sessions create claims for members that lack one
-        let USERNAME_INDEX = {};                     // legacy fallback data only
-        let usernameIndexLoaded = false;             // true once the legacy index was fetched (or is switched off)
-        let usernameIndexPromise = null;             // background load started by bootApp(); login waits on it if needed
+        // ================= PUBLIC USERNAME -> EMAIL INDEX =================
+        // Firebase Auth needs a real email address, but people log in by username. That
+        // lookup has to work BEFORE anyone is signed in, so it can't live in the protected
+        // "clubData" documents (those require auth to read). Instead we keep a small,
+        // non-sensitive {username: email} map in a separate publicIndex/usernameIndex doc
+        // that Firestore rules allow anyone to read (see the rules text shared alongside
+        // this file) — no other member data is ever stored here.
+        let USERNAME_INDEX = {};
+        let usernameIndexLoaded = false;   // true once the public index was fetched successfully
+        let usernameIndexPromise = null;   // background load started by bootApp(); login waits on it if needed
+
+        function buildUsernameIndexPayload() {
+            const map = {};
+            STATE.members.forEach(m => {
+                if (m.username && m.email) map[m.username.toLowerCase()] = m.email;
+            });
+            return { map: map };
+        }
 
         async function loadUsernameIndex() {
-            if (!LEGACY_PUBLIC_INDEX_FALLBACK) { usernameIndexLoaded = true; return; }
             try {
                 await ensureFirebaseReady();
                 const snap = await window.fb.loadPublicDoc('usernameIndex');
@@ -2290,34 +2492,17 @@
                 }
                 usernameIndexLoaded = true;
             } catch (err) {
-                console.error('Could not load the legacy username index - username lookups will use the per-name claims only.', err);
+                console.error('Could not load the public username index — falling back to local data for login lookups.', err);
             }
         }
 
-        // Admin sessions only: make sure every roster member with a valid username owns the matching claim.
-        // Idempotent, never overwrites anything, and reports (does not "fix") names that need an Admin's attention.
-        async function backfillUsernameClaims() {
-            if (!USERNAME_CLAIM_BACKFILL || STATE.currentRole !== 'admin') return;
-            const summary = { created: 0, exists: 0, conflict: [], invalid: [] };
+        async function saveUsernameIndex() {
             try {
                 await ensureFirebaseReady();
-                for (const m of STATE.members.slice()) {
-                    if (!m || !m.username || !m.email) continue;
-                    const u = String(m.username).trim().toLowerCase();
-                    if (!USERNAME_RE.test(u)) { summary.invalid.push(m.username); continue; }
-                    const result = await window.fb.claimUsernameAsAdmin(u, m.email);
-                    if (result === 'created') summary.created++;
-                    else if (result === 'exists') summary.exists++;
-                    else summary.conflict.push(u);
-                }
+                USERNAME_INDEX = buildUsernameIndexPayload().map;
+                await window.fb.savePublicDoc('usernameIndex', { map: USERNAME_INDEX });
             } catch (err) {
-                console.error('Username claim back-fill stopped early:', err);
-                return;
-            }
-            if (summary.created) console.info(`Username claims created for ${summary.created} existing member(s).`);
-            if (summary.conflict.length || summary.invalid.length) {
-                console.warn('Usernames that need an Admin\'s attention:', summary);
-                showToastNotification(`${summary.conflict.length + summary.invalid.length} member username(s) need attention (duplicate or invalid) - see the browser console for the list.`);
+                console.error('Firestore save failed for the username index', err);
             }
         }
 
@@ -2359,6 +2544,7 @@
 
         async function loadClubDataFromFirestore() {
             await ensureFirebaseReady();
+            SYNC_TRACK.loaded.clear();   // AUDIT FIX: nothing may be written back until it has been read back
             const keys = [...FIRESTORE_COLLECTION_KEYS, 'privacySettings', 'clubProfile'];
             // Fetch every document at the same time instead of one after another — this is the
             // biggest chunk of the wait after signing in (and when a saved session is restored).
@@ -2380,9 +2566,12 @@
                         } else {
                             STATE[key] = Array.isArray(data.items) ? data.items : STATE[key];
                         }
+                        if (key === 'privacySettings' || key === 'clubProfile' || Array.isArray(data.items)) markCollectionSynced(key);
                     } else {
                         // First run ever for this project: push the current demo data up.
                         await window.fb.saveCollectionDoc(key, collectionKeyToPayload(key));
+                        markCollectionSynced(key);   // seeded successfully (only an Admin can do this)
+                        if (key === 'members') await saveUsernameIndex();
                     }
                 } catch (err) {
                     console.error('Firestore load failed for', key, '— using local demo data instead.', err);
@@ -2401,6 +2590,12 @@
                 }
             } catch (err) {
                 console.error('Firestore load failed for posts — using local demo data instead.', err);
+            }
+            // Login history + activity log: one document per entry (bounded, role-aware load).
+            try {
+                await loadLogHistory();
+            } catch (err) {
+                console.error('Could not load login history / activity log:', err);
             }
         }
 
@@ -2445,9 +2640,11 @@
                             if (!data.profile) return;
                             STATE.clubProfile = data.profile;
                             ensureClubProfileDefaults();
+                            markCollectionSynced(key);
                         } else {
                             if (!Array.isArray(data.items)) return;
                             STATE[key] = data.items;
+                            markCollectionSynced(key);
                             if (key === 'members') normalizeMemberRecords();
                         }
                         if (key === 'members') populateUserSelector();
@@ -2487,7 +2684,7 @@
         // bundled demo data, or the real roster if it's already been loaded this session).
         function resolveLoginEmail(identifier) {
             if (identifier.includes('@')) return identifier;
-            if (LEGACY_PUBLIC_INDEX_FALLBACK && USERNAME_INDEX[identifier]) return USERNAME_INDEX[identifier];
+            if (USERNAME_INDEX[identifier]) return USERNAME_INDEX[identifier];
             const match = STATE.members.find(m => m.username && m.username.toLowerCase() === identifier);
             return match ? match.email : null;
         }
@@ -2870,30 +3067,21 @@
             }
 
             // ---- Work out which email this username belongs to ----
-            // The per-name claim (usernames/{name}) is the source of truth. The old public index is only a
-            // temporary fallback for accounts that have not been migrated yet.
-            let email = identifier.includes('@') ? identifier : null;
-            let lookupFailed = false;
-            if (!email) {
-                try {
-                    await ensureFirebaseReady();
-                    email = await withTimeout(window.fb.lookupUsername(identifier), 10000, 'Username lookup timed out');
-                } catch (claimErr) {
-                    lookupFailed = true;
-                    console.error('Username lookup failed:', claimErr);
-                }
-            }
-            if (!email && LEGACY_PUBLIC_INDEX_FALLBACK) {
-                if (usernameIndexPromise) {
-                    try { await withTimeout(usernameIndexPromise, 8000, 'Username lookup timed out'); } catch (idxErr) { /* handled below */ }
-                }
+            let email = resolveLoginEmail(identifier);
+            if (!email && usernameIndexPromise) {
+                // The public username index is still loading in the background — wait for it briefly.
+                try { await withTimeout(usernameIndexPromise, 8000, 'Username lookup timed out'); } catch (idxErr) { /* handled below */ }
                 email = resolveLoginEmail(identifier);
             }
+            if (!email && !identifier.includes('@')) {
+                // Fallback: the per-username claim made at registration works even before an Admin has
+                // refreshed the shared username index.
+                try { await ensureFirebaseReady(); email = await window.fb.lookupUsername(identifier); } catch (claimErr) { /* handled below */ }
+            }
             if (!email) {
-                // Same wording as a wrong password, so this screen does not confirm which usernames exist.
-                showAuthMessage(lookupFailed && !usernameIndexLoaded
-                    ? "Couldn't look up that username right now. Try your email address instead, or check your connection."
-                    : 'Incorrect username/email or password. Please check and try again.', 'error');
+                showAuthMessage(usernameIndexLoaded
+                    ? 'No account found with that username or email.'
+                    : "Couldn't look up that username right now. Try your email address instead, or check your connection.", 'error');
                 return;
             }
 
@@ -3160,7 +3348,7 @@
                 // race-proof guarantee is the create-only username claim inside completeRegistration().
                 let claimedBy = null;
                 try { claimedBy = await window.fb.lookupUsername(usernameLower); } catch (lookupErr) { /* verified again at the end */ }
-                if ((LEGACY_PUBLIC_INDEX_FALLBACK && USERNAME_INDEX[usernameLower]) || claimedBy) {
+                if (USERNAME_INDEX[usernameLower] || claimedBy) {
                     showAuthMessage('That username is already taken. Please choose another.', 'error');
                     return;
                 }
@@ -3278,6 +3466,7 @@
 
                 // Registered. Record it (in memory) and sign out - the account is 'pending' until an Admin approves it.
                 recordActivity('Registered New Account', newMember, `${newMember.name} self-registered as a new Member.`, newMember);
+                await Promise.race([flushLogWrites(), new Promise(r => setTimeout(r, 3000))]);   // still signed in as the new account here
                 resetRegAvatarUpload();
                 try { await window.fb.signOutUser(); } catch (so) { /* ignore */ }
                 document.getElementById('registerForm').reset();
@@ -3349,8 +3538,6 @@
 
             initApp();
             startRealtimeSync();
-            // Admin sessions quietly make sure every member has a username claim (migration; see USERNAME_CLAIM_BACKFILL).
-            if (STATE.currentRole === 'admin') setTimeout(() => { backfillUsernameClaims(); }, 2500);
 
             // First-login gate: a member whose profile has not been completed yet must
             // fill out the required Complete Member Profile form before doing anything else.
@@ -3900,7 +4087,9 @@
 
             const account = STATE.members.find(m => m.id === STATE.auth.userId);
             if (account) recordLogout(account);
-            persistCollection('loginHistory');
+            // AUDIT FIX: wait (briefly) for the check-out write before signing out; it used to race
+            // signOut and could be denied. Bounded so an offline logout can never hang.
+            await Promise.race([flushLogWrites(), new Promise(r => setTimeout(r, 3000))]);
 
             STATE.auth.isLoggedIn = false;
             STATE.auth.userId = null;
@@ -3927,8 +4116,8 @@
         // member, date, time, session status and how long they stayed signed in.
         function recordLogin(account) {
             const now = new Date();
-            STATE.loginHistory.unshift({
-                id: 'lh' + (STATE.loginHistory.length + 1) + '_' + Date.now(),
+            const entry = {
+                id: newLogId('lh_'),
                 userId: account.id,
                 userName: account.name,
                 role: account.authRole === 'admin' ? 'Admin' : 'Member',
@@ -3938,8 +4127,11 @@
                 logoutTime: null,
                 status: 'Active Session',
                 checkInType: 'Automatic Check-In',
-                source: 'Member Portal'
-            });
+                source: 'Member Portal',
+                writerEmail: currentAuthEmail()
+            };
+            STATE.loginHistory.unshift(entry);
+            queueLogWrite('loginHistory', entry);
         }
 
         // ---------- Check-in helpers (Login History doubles as the attendance record) ----------
@@ -4051,6 +4243,7 @@
             if (entry) {
                 entry.logoutTime = new Date().toISOString();
                 entry.status = 'Checked Out';
+                queueLogWrite('loginHistory', entry);
             }
         }
 
@@ -4058,16 +4251,19 @@
         // performedByOverride lets self-registration attribute the action to the new user themselves.
         function recordActivity(action, targetMember, details, performedByOverride) {
             const actor = performedByOverride || STATE.members.find(m => m.id === STATE.auth.userId);
-            STATE.activityLog.unshift({
-                id: 'log' + (STATE.activityLog.length + 1) + '_' + Date.now(),
+            const entry = {
+                id: newLogId('log_'),
                 editedById: actor ? actor.id : 'system',
                 editedByName: actor ? actor.name : 'System',
                 action: action,
                 memberAffectedId: targetMember ? targetMember.id : null,
                 memberAffectedName: targetMember ? targetMember.name : 'N/A',
                 details: details,
-                timestamp: new Date().toISOString()
-            });
+                timestamp: new Date().toISOString(),
+                writerEmail: currentAuthEmail()
+            };
+            STATE.activityLog.unshift(entry);
+            queueLogWrite('activityLog', entry);
         }
 
         function formatLogDateTime(isoStr) {
@@ -4183,7 +4379,7 @@
                         { id: 'archive', label: 'Archive', icon: 'fa-box-archive', badge: archivedMembers().length },
                         { id: 'club-content', label: 'Admin Panel', icon: 'fa-file-lines' },
                         { id: 'privacy-settings', label: 'Privacy', icon: 'fa-lock' },
-                        { id: 'activity-log', label: 'Activity Log', icon: 'fa-file-pen', badge: STATE.activityLog.length }
+                        { id: 'activity-log', label: 'Activity Log', icon: 'fa-file-pen', badge: (STATE.activityLog.length >= LOG_LIMITS.adminActivityLog ? LOG_LIMITS.adminActivityLog + '+' : STATE.activityLog.length) }
                     ]
                 });
             }
@@ -5062,16 +5258,74 @@
         // Intentionally has NO sidebar entry (see getNavGroups) — reachable only via the "Posts"
         // preview card on the About page (Add a post / View All) and via clicking a post itself.
 
+        // ================= POSTS: limits, helpers, one-time uid conversion (audit step 3) =================
+        const POST_MAX_IMAGES = 6;          // matches the Security Rules
+        const POST_MAX_BYTES = 950000;      // Firestore's document limit is 1,048,576 bytes
+        const POST_VIEWED = new Set();      // post ids already counted as viewed in this session
+        function currentUid() { return (window.fb && window.fb.currentUid && window.fb.currentUid()) || null; }
+        function postDocBytes(post) { return new Blob([JSON.stringify(post)]).size; }
+
+        // ONE-TIME, Admin-only, explicit. Converts old posts to the new ownership model:
+        //   * stamps authorUid on posts that only have authorEmail
+        //   * rewrites likes stored as internal member ids into Firebase Auth uids
+        // The id -> uid map comes from the public usernames/{username} claims. Anything that cannot be mapped is
+        // left alone and reported. Safe to re-run. Only covers the posts currently loaded (newest 60).
+        async function migratePostsToUids() {
+            if (!isAdmin()) throw new Error('Only an Admin can run this.');
+            await ensureFirebaseReady();
+            const idToUid = {};
+            const emailToUid = {};
+            for (const m of STATE.members) {
+                if (!m.username) continue;
+                let uid = null;
+                try { uid = await window.fb.lookupUsernameUid(String(m.username).toLowerCase()); } catch (e) { /* skip */ }
+                if (!uid) continue;
+                idToUid[m.id] = uid;
+                if (m.email) emailToUid[m.email.toLowerCase()] = uid;
+            }
+            const summary = { postsChecked: STATE.posts.length, authorsStamped: 0, likesConverted: 0, likesUnmapped: 0 };
+            for (const p of STATE.posts) {
+                const fields = {};
+                if (!p.authorUid && p.authorEmail && emailToUid[String(p.authorEmail).toLowerCase()]) {
+                    fields.authorUid = emailToUid[String(p.authorEmail).toLowerCase()];
+                }
+                if (Array.isArray(p.likes)) {
+                    const out = [];
+                    let changed = false;
+                    p.likes.forEach(l => {
+                        const mapped = idToUid[l] || l;
+                        if (mapped !== l) { changed = true; summary.likesConverted++; }
+                        if (out.includes(mapped)) { changed = true; return; }
+                        out.push(mapped);
+                        if (!idToUid[l] && String(l).length < 20) summary.likesUnmapped++;   // Auth uids are 28 chars
+                    });
+                    if (changed) fields.likes = out;
+                }
+                if (Object.keys(fields).length) {
+                    await window.fb.updatePostFields(p.id, fields);
+                    Object.assign(p, fields);
+                    if (fields.authorUid) summary.authorsStamped++;
+                }
+            }
+            renderView(STATE.currentView);
+            console.info('Posts conversion finished:', summary);
+            return summary;
+        }
         function postAuthor(p) {
             const m = STATE.members.find(mm => mm.id === p.authorId);
             return {
                 name: (m && m.name) || p.authorName || 'Member',
-                photo: (m && m.photo) || p.authorPhoto || null
+                photo: (m && (m.avatar || m.photo)) || p.authorPhoto || null
             };
         }
 
         function postLikeCount(p) { return Array.isArray(p.likes) ? p.likes.length : 0; }
-        function postIsLikedByMe(p) { return Array.isArray(p.likes) && !!STATE.activeUserId && p.likes.includes(STATE.activeUserId); }
+        function postIsLikedByMe(p) {
+            if (!Array.isArray(p.likes)) return false;
+            const uid = currentUid();
+            // second clause = likes stored by earlier versions under the internal member id
+            return (!!uid && p.likes.includes(uid)) || (!!STATE.activeUserId && p.likes.includes(STATE.activeUserId));
+        }
         // Supports old records that only ever had a single "image" field.
         function postImages(p) { return Array.isArray(p.images) && p.images.length ? p.images : (p.image ? [p.image] : []); }
 
@@ -5215,8 +5469,17 @@
             if (!files.length) return;
             const fileInput = document.getElementById('postImageFile');
             for (const file of files) {
+                if (postImageDataUrls.length >= POST_MAX_IMAGES) {
+                    appAlert(`A post can have at most ${POST_MAX_IMAGES} photos.`);
+                    break;
+                }
                 try {
                     const compressed = await compressImageFile(file);
+                    const total = postImageDataUrls.reduce((n, u) => n + u.length, 0) + compressed.length;
+                    if (total > POST_MAX_BYTES - 20000) {
+                        appAlert('Adding this photo would make the post too large. Please remove a photo first or choose a smaller one.');
+                        continue;
+                    }
                     postImageDataUrls.push(compressed);
                 } catch (err) {
                     console.error('Could not process photo', file.name, err);
@@ -5250,7 +5513,7 @@
             `;
         }
 
-        function handlePostFormSubmit(e) {
+        async function handlePostFormSubmit(e) {
             e.preventDefault();
             if (!STATE.activeUserId) return;
             const caption = document.getElementById('postCaption').value.trim();
@@ -5258,33 +5521,48 @@
                 appAlert('Please choose at least one photo and write a caption.');
                 return;
             }
+            if (caption.length > 1000) {
+                appAlert('Your caption is too long. Please keep it under 1,000 characters.');
+                return;
+            }
             const currentEmail = window.fb && window.fb.currentUserEmail ? window.fb.currentUserEmail() : null;
             const me = STATE.members.find(m => m.id === STATE.activeUserId)
                 || (currentEmail ? STATE.members.find(m => m.email && m.email.toLowerCase() === currentEmail.toLowerCase()) : null);
             const newPost = {
-                id: 'post' + Date.now(),
+                id: 'post' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                 authorId: STATE.activeUserId,
-                authorName: me ? me.name : 'Member',
-                authorPhoto: me ? (me.photo || null) : null,
-                // Stored alongside authorId so Firestore Security Rules can verify post
-                // ownership against request.auth.token.email (authorId is our own internal
-                // member id, not the Firebase Auth uid, so rules can't check it directly).
-                // Pulled straight from the signed-in Firebase user, NOT the member record —
-                // guarantees an exact match with what the rules compare against.
-                authorEmail: (window.fb && window.fb.currentUserEmail && window.fb.currentUserEmail())
-                    || (me ? me.email : ''),
+                authorName: (me ? me.name : 'Member').slice(0, 100),
+                // AUDIT FIX: was me.photo (a field members do not have). The avatar is now looked up live from
+                // the member record when the post is drawn (see postAuthor), never copied into every post.
+                authorPhoto: null,
+                // authorEmail / authorUid come straight from the signed-in Firebase user so they match exactly
+                // what the Security Rules compare against. authorUid is the durable owner key: it survives an
+                // Admin changing the member's email, which used to orphan their posts.
+                authorEmail: currentEmail || (me ? me.email : ''),
+                authorUid: currentUid(),
                 images: postImageDataUrls.slice(),
                 caption: caption,
                 date: new Date().toISOString(),
                 views: 0,
                 likes: []
             };
+            if (postDocBytes(newPost) > POST_MAX_BYTES) {
+                appAlert('These photos are too large to post together. Please remove one or choose smaller photos.');
+                return;
+            }
             STATE.posts.unshift(newPost);
             postImageDataUrls = [];
-            persistPost(newPost);
             closeModal();
-            showToastNotification('Post shared!');
             renderView(STATE.currentView);
+            // AUDIT FIX: the post is now taken back out (and the person told) if the save is refused,
+            // instead of showing "Post shared!" for something that disappears on refresh.
+            const ok = await persistPost(newPost);
+            if (ok) {
+                showToastNotification('Post shared!');
+            } else {
+                STATE.posts = STATE.posts.filter(pp => pp.id !== newPost.id);
+                renderView(STATE.currentView);
+            }
         }
 
         // ---------- Post detail popup ----------
@@ -5293,10 +5571,25 @@
         function openPostDetail(id) {
             const p = STATE.posts.find(pp => pp.id === id);
             if (!p) return;
-            p.views = (p.views || 0) + 1;
-            persistPost(p);
+            recordPostView(p);
             postDetailImgIndex = 0;
             renderPostDetailModal(p);
+        }
+
+        // AUDIT FIX: a view used to re-upload the whole post (all photos) and could be counted many times.
+        // Now: one atomic increment(1), once per post per session, never for your own post.
+        async function recordPostView(p) {
+            const uid = currentUid();
+            if (p.authorId === STATE.activeUserId || (uid && p.authorUid === uid) || POST_VIEWED.has(p.id)) return;
+            POST_VIEWED.add(p.id);
+            p.views = (p.views || 0) + 1;
+            try {
+                await ensureFirebaseReady();
+                await window.fb.viewPostDoc(p.id);
+            } catch (err) {
+                console.error('Could not record post view:', err);
+                p.views = Math.max(0, (p.views || 1) - 1);
+            }
         }
 
         function postDetailGoTo(id, i) {
@@ -5355,15 +5648,36 @@
             openModal(html);
         }
 
-        function togglePostLike(id) {
+        async function togglePostLike(id) {
             const p = STATE.posts.find(pp => pp.id === id);
             if (!p || !STATE.activeUserId) return;
+            const uid = currentUid();
+            if (!uid) return;
             if (!Array.isArray(p.likes)) p.likes = [];
-            const idx = p.likes.indexOf(STATE.activeUserId);
-            if (idx === -1) p.likes.push(STATE.activeUserId); else p.likes.splice(idx, 1);
-            persistPost(p);
-            renderPostDetailModal(p);
-            if (STATE.currentView === 'posts' || STATE.currentView === 'about-club') renderView(STATE.currentView);
+            const hasUid = p.likes.includes(uid);
+            // Likes made before this update are stored under the internal member id, which the Security Rules
+            // cannot verify, so they can only be converted by an Admin (migratePostsToUids).
+            if (!hasUid && p.likes.includes(STATE.activeUserId)) {
+                showToastNotification('Your earlier like cannot be changed yet. Please ask an Admin to finish the posts update.');
+                return;
+            }
+            const willLike = !hasUid;
+            const refresh = () => {
+                renderPostDetailModal(p);
+                if (STATE.currentView === 'posts' || STATE.currentView === 'about-club') renderView(STATE.currentView);
+            };
+            if (willLike) p.likes.push(uid); else p.likes.splice(p.likes.indexOf(uid), 1);
+            refresh();
+            try {
+                await ensureFirebaseReady();
+                await window.fb.likePostDoc(p.id, uid, willLike);   // atomic: two people liking at once can no longer erase each other
+            } catch (err) {
+                console.error('Could not save like:', err);
+                const i = p.likes.indexOf(uid);
+                if (willLike) { if (i !== -1) p.likes.splice(i, 1); } else if (i === -1) p.likes.push(uid);
+                refresh();
+                showToastNotification('Could not save your like. Please try again.');
+            }
         }
 
         async function deletePost(id) {
@@ -5372,11 +5686,18 @@
             const canDelete = isAdmin() || p.authorId === STATE.activeUserId;
             if (!canDelete) return;
             if (!(await appConfirm('Delete this post?'))) return;
+            const oldIndex = STATE.posts.indexOf(p);
             STATE.posts = STATE.posts.filter(pp => pp.id !== id);
-            deletePostRemote(id);
             closeModal();
-            showToastNotification('Post deleted.');
             renderView(STATE.currentView);
+            // AUDIT FIX: previously the post vanished locally even when Firestore refused the delete.
+            const ok = await deletePostRemote(id);
+            if (ok) {
+                showToastNotification('Post deleted.');
+            } else {
+                STATE.posts.splice(Math.min(oldIndex, STATE.posts.length), 0, p);
+                renderView(STATE.currentView);
+            }
         }
 
         // ---------- Slideshow controls (view-only UI state; not persisted to Firestore) ----------
@@ -5614,16 +5935,22 @@
         // (handleSaveClubSlides) needs no changes. No forced resize/compression — whatever
         // photo is attached is used as-is, displayed at its own size with no black background.
         function handleClubSlideFileUpload(e, i) {
-            const file = e.target.files && e.target.files[0];
+            const input = e.target;
+            const file = input.files && input.files[0];
             if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(evt) {
+            // AUDIT FIX: this used to keep photos exactly as attached. Up to 5 raw photos live in
+            // clubProfile, which is publicly readable and downloaded on the login page. Each slide is
+            // now capped (~160k chars) so all five plus the text stay well under the 1 MB limit.
+            compressImageToLimit(file, 160000, 1280).then(url => {
                 const urlEl = document.getElementById('cpSlideUrl' + i);
                 const previewEl = document.getElementById('cpSlidePreview' + i);
-                if (urlEl) urlEl.value = evt.target.result;
-                if (previewEl) { previewEl.style.visibility = 'visible'; previewEl.src = evt.target.result; }
-            };
-            reader.readAsDataURL(file);
+                if (urlEl) urlEl.value = url;
+                if (previewEl) { previewEl.style.visibility = 'visible'; previewEl.src = url; }
+            }).catch(err => {
+                console.error('Could not use the slideshow photo:', err);
+                input.value = '';
+                appAlert('That photo could not be used. Please choose a normal JPG or PNG image.');
+            });
         }
 
         function clearClubSlide(i) {
@@ -7196,7 +7523,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             }
         }
 
-        async function saveMemberProfileChanges(memberId) {
+        function saveMemberProfileChanges(memberId) {
             // This form is only ever rendered with editable fields for an Admin (see
             // renderEditorTabBody's disabledAttr / the Account tab, which is Admin-only); this
             // guard stops the save from taking effect even if the function were called directly.
@@ -7224,41 +7551,6 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const username = document.getElementById('editUsername')?.value;
             const bio = document.getElementById('editBio')?.value;
 
-            // Username change: validate, then move the login claim BEFORE touching the roster record, so the
-            // roster and usernames/{name} can never disagree and a taken name is never overwritten.
-            // The old name is released (login by the old name stops working and the name becomes free).
-            let usernameNew = '';
-            const usernameTyped = String(username === undefined ? '' : username).trim().toLowerCase();
-            const usernameOld = String(member.username || '').trim().toLowerCase();
-            if (usernameTyped && usernameTyped !== usernameOld) {
-                if (!USERNAME_RE.test(usernameTyped)) {
-                    appAlert('Username must be 3-30 characters: letters, numbers, dot, dash or underscore only.');
-                    return;
-                }
-                if (RESERVED_USERNAMES.includes(usernameTyped)) {
-                    appAlert('That username is reserved. Please choose another.');
-                    return;
-                }
-                if (STATE.members.some(m => m.id !== member.id && m.username && String(m.username).toLowerCase() === usernameTyped)) {
-                    appAlert('That username is already taken. Please choose another.');
-                    return;
-                }
-                let renamed;
-                try {
-                    await ensureFirebaseReady();
-                    renamed = await window.fb.renameUsernameClaim(usernameOld, usernameTyped, member.email);
-                } catch (claimErr) {
-                    console.error('Could not update the username claim:', claimErr);
-                    appAlert('Could not update the username right now. Please check your connection/permissions and try again.');
-                    return;
-                }
-                if (renamed === 'taken') {
-                    appAlert('That username is already taken. Please choose another.');
-                    return;
-                }
-                usernameNew = usernameTyped;
-            }
-
             // Track field-level changes for the Edit/Activity Log before mutating the record
             const changeLog = [];
             const trackChange = (label, oldVal, newVal) => {
@@ -7281,7 +7573,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             trackChange('Branch', member.branch, branch);
             trackChange('Weight Class', member.weightClass, weight);
             trackChange('Belt Rank', member.belt, belt);
-            trackChange('Username', member.username, usernameNew);
+            trackChange('Username', member.username, username);
             trackChange('Bio / Club Contribution', member.bio, bio);
             trackChange('Member Type', memberTypeLabel(member.memberType), memberType ? memberTypeLabel(memberType) : undefined);
 
@@ -7304,7 +7596,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             if (kukkiwon) member.kukkiwonId = kukkiwon;
             if (branch) member.branch = branch;
             if (weight) member.weightClass = weight;
-            if (usernameNew) member.username = usernameNew;
+            if (username) member.username = username;
             if (bio !== undefined) member.bio = bio.trim();
 
             if (belt && belt !== member.belt) {
@@ -8701,14 +8993,28 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
         let certImageDataUrl = null;
 
         function handleCertImageUpload(e) {
-            const file = e.target.files && e.target.files[0];
+            const input = e.target;
+            const file = input.files && input.files[0];
             if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                certImageDataUrl = evt.target.result;
-                refreshCertImagePreview();
-            };
-            reader.readAsDataURL(file);
+            const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+            const useDataUrl = (url) => { certImageDataUrl = url; refreshCertImagePreview(); };
+            if (isPdf) {
+                // AUDIT FIX: PDFs cannot be shrunk in the browser, so cap them (base64 adds ~33%).
+                if (file.size > 300 * 1024) {
+                    input.value = '';
+                    appAlert('That PDF is too large to store (limit 300 KB). Please attach a smaller PDF or a picture of the certificate instead.');
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = function(evt) { useDataUrl(evt.target.result); };
+                reader.readAsDataURL(file);
+                return;
+            }
+            compressImageToLimit(file, 300000, 1280).then(useDataUrl).catch(err => {
+                console.error('Could not use the certificate image:', err);
+                input.value = '';
+                appAlert('That file could not be used. Please choose a picture (JPG/PNG) or a small PDF.');
+            });
         }
 
         function removeCertImage() {
@@ -9139,14 +9445,19 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
         let announcementImageDataUrl = null;
 
         function handleAnnouncementImageUpload(e) {
-            const file = e.target.files && e.target.files[0];
+            const input = e.target;
+            const file = input.files && input.files[0];
             if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                announcementImageDataUrl = evt.target.result;
+            // AUDIT FIX: shrink to a bounded JPEG so one poster can no longer make the whole
+            // announcements document too big to save.
+            compressImageToLimit(file, 300000, 1280).then(url => {
+                announcementImageDataUrl = url;
                 refreshAnnouncementImagePreview();
-            };
-            reader.readAsDataURL(file);
+            }).catch(err => {
+                console.error('Could not use the announcement image:', err);
+                input.value = '';
+                appAlert('That image could not be used (it must be a normal picture and small enough after compression). Please choose a different one.');
+            });
         }
 
         function removeAnnouncementImage() {
@@ -9826,26 +10137,40 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
         // registration avatar / certificate / announcement uploads elsewhere in this file)
         // and saves it as the signed-in member's own profile photo.
         function handleMyAvatarFileChange(e) {
-            const file = e.target.files && e.target.files[0];
+            const input = e.target;
+            const file = input.files && input.files[0];
             if (!file) return;
             if (!file.type.startsWith('image/')) {
                 showToastNotification('Please choose an image file.', 'error');
-                e.target.value = '';
+                input.value = '';
                 return;
             }
             const user = STATE.members.find(m => m.id === STATE.activeUserId);
             if (!user) return;
-            const reader = new FileReader();
-            reader.onload = evt => {
-                user.avatar = evt.target.result;
+            input.value = '';
+            // AUDIT FIX: the photo used to be stored raw (a phone photo is several MB of base64), which
+            // pushed the shared members document over Firestore's 1 MB limit and failed silently.
+            // It is now shrunk to a 256px JPEG (same helper the registration form uses) and the save
+            // result is checked before we tell the member it worked.
+            downscaleImageFile(file, 256, 0.82).then(async dataUrl => {
+                const previous = user.avatar;
+                user.avatar = dataUrl;
+                try {
+                    await persistCollectionStrict('members');
+                } catch (err) {
+                    user.avatar = previous;
+                    console.error('Could not save profile photo:', err);
+                    appAlert('Your profile photo could not be saved. Please try again in a moment.');
+                    return;
+                }
                 recordActivity('Updated Profile Photo', user, `${user.name} updated their own profile photo.`, user);
-                persistCollection('members');
                 populateUserSelector();
                 showToastNotification('Your profile photo has been updated!');
                 renderView('my-profile');
-            };
-            reader.readAsDataURL(file);
-            e.target.value = '';
+            }).catch(err => {
+                console.error('Could not use the chosen profile photo:', err);
+                appAlert('That photo could not be used. Please choose a normal JPG or PNG image.');
+            });
         }
         // Removes the signed-in member's own profile photo — falls back to the default
         // no-face silhouette icon everywhere their avatar is shown.
@@ -10411,35 +10736,9 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 appAlert('That username is already taken. Please choose another.');
                 return;
             }
-            const usernameLower = username.toLowerCase();
-            if (!USERNAME_RE.test(usernameLower)) {
-                appAlert('Username must be 3-30 characters: letters, numbers, dot, dash or underscore only.');
-                return;
-            }
-            if (RESERVED_USERNAMES.includes(usernameLower)) {
-                appAlert('That username is reserved. Please choose another.');
-                return;
-            }
 
             const submitBtn = e.target.querySelector('button[type="submit"]');
             if (submitBtn) submitBtn.disabled = true;
-
-            // Claim the login username FIRST (create-only, so an existing name can never be taken over).
-            // If creating the login account then fails, the claim is released again below.
-            try {
-                await ensureFirebaseReady();
-                const claim = await window.fb.claimUsernameAsAdmin(usernameLower, email);
-                if (claim !== 'created') {
-                    appAlert('That username is already taken. Please choose another.');
-                    if (submitBtn) submitBtn.disabled = false;
-                    return;
-                }
-            } catch (claimErr) {
-                console.error('Could not reserve the username:', claimErr);
-                appAlert('Could not reserve that username right now. Please check your connection and try again.');
-                if (submitBtn) submitBtn.disabled = false;
-                return;
-            }
 
             // Create the member's real Firebase Auth account up front. This uses a short-lived
             // secondary Auth instance so the Admin stays signed in under their own session —
@@ -10451,7 +10750,6 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 newMemberUid = await window.fb.registerWithoutSignIn(email, password);
             } catch (err) {
                 console.error('Could not create this member\'s login account:', err);
-                try { await window.fb.releaseUsernameClaim(usernameLower, email); } catch (relErr) { console.error('Could not release the reserved username:', relErr); }
                 const msg = err.code === 'auth/email-already-in-use'
                     ? 'An account with that email already exists.'
                     : 'Could not create this member\'s login account right now. Please check your connection and try again.';
@@ -10464,7 +10762,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const newMember = {
                 id: newId,
                 name: name,
-                username: usernameLower,
+                username: username,
                 authRole: 'member',
                 memberType: memberType,
                 role: memberType === 'instructor' ? 'Instructor' : (memberType === 'senior' ? 'Senior Member' : 'Member / Student'),
@@ -10500,6 +10798,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
 
             recordActivity('Registered Member', newMember, `Admin registered new ${memberTypeLabel(memberType).toLowerCase()} "${name}" with starting rank "${belt}".`);
             persistCollection('members');
+            saveUsernameIndex();
 
             populateUserSelector();
             closeModal();
@@ -10564,12 +10863,6 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             let saved = true;
             try { await persistCollectionStrict('members'); } catch (err) { saved = false; console.error('Permanent delete save failed:', err); }
 
-            // Release the username so it can be used again (best effort; only deletes a claim that points at this member's email).
-            if (saved && member.username) {
-                try { await window.fb.releaseUsernameClaim(String(member.username).toLowerCase(), member.email); }
-                catch (relErr) { console.error('Could not release the username claim:', relErr); }
-            }
-
             showToastNotification(saved
                 ? 'Member record permanently deleted.'
                 : 'Removed locally, but could not confirm the delete was saved to the server — check your connection/permissions.');
@@ -10581,8 +10874,8 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
         // ================= APP BOOT SEQUENCE (Firebase-aware) =================
         // Runs once on page load, behind #bootLoadingOverlay, so the login screen never
         // flashes for someone who is already signed in on this device/browser:
-        //   1. (Legacy fallback only) load the old public username index. Normal username logins read
-        //      ONE usernames/{name} claim at sign-in time instead.
+        //   1. Load the small public username->email index (readable pre-login) so the
+        //      login form can resolve a username even before anyone signs in.
         //   2. Ask Firebase Auth whether there's already a signed-in session.
         //   3. Only once signed in do we pull the real, protected club data down from
         //      Firestore (loadClubDataFromFirestore) — those documents require auth to
