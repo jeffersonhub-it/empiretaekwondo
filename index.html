@@ -120,9 +120,9 @@
         // Thin wrapper so the classic script below can call Firebase without needing
         // to be a module itself. All protected club data lives under the "clubData"
         // collection, one document per STATE slice (members, announcements, achievements,
-        // etc.) — locked to signed-in users by Firestore rules. "publicIndex" holds only
-        // the small, non-sensitive lookups (like username -> email) that must be readable
-        // before someone has signed in yet, e.g. to resolve a username at the login screen.
+        // etc.) — locked to signed-in users by Firestore rules. The ONLY data readable before sign-in
+        // is one tiny document per username (usernames/{name} = { email }), fetched by exact name so the
+        // login screen can turn a username into an email without ever exposing the member list.
         window.fb = {
             auth: fbAuth,
             db: fbDb,
@@ -193,13 +193,62 @@
             savePostDoc: (post) => setDoc(doc(fbDb, 'clubData', 'posts', 'items', post.id), post),
             deletePostDoc: (postId) => deleteDoc(doc(fbDb, 'clubData', 'posts', 'items', postId)),
             watchPostDocs: (cb) => onSnapshot(collection(fbDb, 'clubData', 'posts', 'items'), cb),
+            // READ-ONLY legacy fallback. publicIndex/usernameIndex is retired (it exposed every member's email
+            // to the public) and the app never writes it any more - see the usernames/{name} claims below.
             loadPublicDoc: (key) => getDoc(doc(fbDb, 'publicIndex', key)),
-            savePublicDoc: (key, data) => setDoc(doc(fbDb, 'publicIndex', key), data),
             // ================= REGISTRATION (atomic) =================
             // Public read of ONE username claim (usernames/{name} -> { email, uid }).
             lookupUsername: async (usernameLower) => {
                 const snap = await getDoc(doc(fbDb, 'usernames', usernameLower));
                 return snap.exists() ? (snap.data().email || null) : null;
+            },
+            // ---- Admin-side username claim helpers (the Firestore Rules reject all of these for non-Admins) ----
+            // Claims are create-only: an existing name is never overwritten, only released (deleted) and re-claimed.
+            // Returns 'created' | 'exists' (already this member's) | 'taken' (someone else's).
+            claimUsernameAsAdmin: async (usernameLower, email) => {
+                const ref = doc(fbDb, 'usernames', usernameLower);
+                const snap = await getDoc(ref);
+                if (snap.exists()) {
+                    return String(snap.data().email || '').toLowerCase() === String(email || '').toLowerCase() ? 'exists' : 'taken';
+                }
+                try {
+                    await setDoc(ref, { email: email });
+                } catch (err) {
+                    // Lost a race: the name was claimed between the read and the write.
+                    if ((await getDoc(ref)).exists()) return 'taken';
+                    throw err;
+                }
+                return 'created';
+            },
+            // Deletes a claim, but only if it points at this member's email (never someone else's).
+            releaseUsernameClaim: async (usernameLower, email) => {
+                if (!usernameLower) return false;
+                const ref = doc(fbDb, 'usernames', usernameLower);
+                const snap = await getDoc(ref);
+                if (!snap.exists()) return false;
+                if (email && String(snap.data().email || '').toLowerCase() !== String(email).toLowerCase()) return false;
+                await deleteDoc(ref);
+                return true;
+            },
+            // Atomic rename: release the old claim (if it is this member's) + create the new one, or neither.
+            // Returns 'renamed' | 'taken'.
+            renameUsernameClaim: async (oldLower, newLower, email) => {
+                const newRef = doc(fbDb, 'usernames', newLower);
+                if ((await getDoc(newRef)).exists()) return 'taken';
+                const batch = writeBatch(fbDb);
+                if (oldLower && oldLower !== newLower) {
+                    const oldRef = doc(fbDb, 'usernames', oldLower);
+                    const oldSnap = await getDoc(oldRef);
+                    if (oldSnap.exists() && String(oldSnap.data().email || '').toLowerCase() === String(email || '').toLowerCase()) batch.delete(oldRef);
+                }
+                batch.set(newRef, { email: email });
+                try {
+                    await batch.commit();
+                } catch (err) {
+                    if ((await getDoc(newRef)).exists()) return 'taken';
+                    throw err;
+                }
+                return 'renamed';
             },
             // Finishes a self-registration for the CURRENT signed-in user in ONE atomic batch:
             //   (1) claim the username (create-only: fails if anyone already owns it), and
@@ -246,20 +295,28 @@
                 const role = await window.fb.getMyRole();
                 if (role.authRole !== 'admin') throw new Error('Only a server-verified Admin can be provisioned.');
                 const email = user.email;
-                const indexRef = doc(fbDb, 'publicIndex', 'usernameIndex');
-                const indexSnap = await getDoc(indexRef);
-                const map = (indexSnap.exists() && indexSnap.data().map) ? { ...indexSnap.data().map } : {};
-                let username = String(email).split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '') || 'admin';
-                if (map[username] && String(map[username]).toLowerCase() !== email.toLowerCase()) username += '_admin';
+                // Roster entry + login-name claim for a server-verified Admin (roles/{uid} said 'admin').
+                // The username is claimed in usernames/{name}; the retired public index is never written.
                 const membersRef = doc(fbDb, 'clubData', 'members');
                 const membersSnap = await getDoc(membersRef);
                 const items = (membersSnap.exists() && Array.isArray(membersSnap.data().items)) ? membersSnap.data().items.slice() : [];
+                const existingIdx = items.findIndex(m => m.email && m.email.toLowerCase() === email.toLowerCase());
+                // Usernames must fit the claim format (3-30 chars of a-z 0-9 . _ -).
+                const fit = (u) => { let s = String(u || '').toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 30); while (s.length < 3) s += '_'; return s; };
+                const baseName = fit((existingIdx !== -1 && items[existingIdx].username) ? items[existingIdx].username : String(email).split('@')[0]);
+                let username = null;
+                let claimIsNew = false;
+                for (let n = 0; n < 6 && !username; n++) {
+                    const candidate = n === 0 ? baseName : fit(baseName.slice(0, 20) + '_admin' + (n > 1 ? n : ''));
+                    const claimSnap = await getDoc(doc(fbDb, 'usernames', candidate));
+                    if (!claimSnap.exists()) { username = candidate; claimIsNew = true; }
+                    else if (String(claimSnap.data().email || '').toLowerCase() === email.toLowerCase()) { username = candidate; }
+                }
+                if (!username) throw new Error('Could not find a free username for this Admin account.');
                 const record = { ...memberDraft, username: username, email: email, authRole: 'admin', accountStatus: 'approved', status: 'Active' };
-                const idx = items.findIndex(m => m.email && m.email.toLowerCase() === email.toLowerCase());
-                if (idx === -1) items.push(record); else items[idx] = { ...items[idx], ...record };
+                if (existingIdx === -1) items.push(record); else items[existingIdx] = { ...items[existingIdx], ...record };
                 await setDoc(membersRef, { items });
-                map[username] = email;
-                await setDoc(indexRef, { map });
+                if (claimIsNew) await setDoc(doc(fbDb, 'usernames', username), { email: email, uid: user.uid });
                 return { uid: user.uid, email };
             }
         };
@@ -2202,29 +2259,29 @@
             for (const key of [...FIRESTORE_COLLECTION_KEYS, 'privacySettings', 'clubProfile']) {
                 await persistCollection(key);
             }
-            await saveUsernameIndex();
         }
 
-        // ================= PUBLIC USERNAME -> EMAIL INDEX =================
-        // Firebase Auth needs a real email address, but people log in by username. That
-        // lookup has to work BEFORE anyone is signed in, so it can't live in the protected
-        // "clubData" documents (those require auth to read). Instead we keep a small,
-        // non-sensitive {username: email} map in a separate publicIndex/usernameIndex doc
-        // that Firestore rules allow anyone to read (see the rules text shared alongside
-        // this file) — no other member data is ever stored here.
-        let USERNAME_INDEX = {};
-        let usernameIndexLoaded = false;   // true once the public index was fetched successfully
-        let usernameIndexPromise = null;   // background load started by bootApp(); login waits on it if needed
-
-        function buildUsernameIndexPayload() {
-            const map = {};
-            STATE.members.forEach(m => {
-                if (m.username && m.email) map[m.username.toLowerCase()] = m.email;
-            });
-            return { map: map };
-        }
+        // ================= USERNAME -> EMAIL LOOKUP (one claim document per username) =================
+        // Firebase Auth signs in with an email, but people log in with a username, and that lookup has to
+        // work BEFORE anyone is signed in. It lives in one tiny document PER username:
+        //     usernames/{usernameLower} = { email[, uid] }
+        // Firestore Rules: anyone may read ONE claim by its exact name (no listing, so the member list can not
+        // be downloaded); a claim can only be CREATED, never overwritten - by the registrant during sign-up
+        // (atomic with their roster record) or by an Admin. Admins also release (delete) a claim when a
+        // username is renamed or a member is permanently deleted.
+        // The old shared publicIndex/usernameIndex document exposed EVERY member's email to the public. It is
+        // no longer written by this app; it is only read as a temporary fallback while old accounts migrate.
+        const USERNAME_RE = /^[a-z0-9._-]{3,30}$/;
+        // MIGRATION SWITCHES - once every member has a claim (an Admin has logged in with no warnings), set
+        // both to false and delete publicIndex/usernameIndex in the Firebase Console.
+        const LEGACY_PUBLIC_INDEX_FALLBACK = true;   // still read the old public index if a claim is missing
+        const USERNAME_CLAIM_BACKFILL = true;        // Admin sessions create claims for members that lack one
+        let USERNAME_INDEX = {};                     // legacy fallback data only
+        let usernameIndexLoaded = false;             // true once the legacy index was fetched (or is switched off)
+        let usernameIndexPromise = null;             // background load started by bootApp(); login waits on it if needed
 
         async function loadUsernameIndex() {
+            if (!LEGACY_PUBLIC_INDEX_FALLBACK) { usernameIndexLoaded = true; return; }
             try {
                 await ensureFirebaseReady();
                 const snap = await window.fb.loadPublicDoc('usernameIndex');
@@ -2233,17 +2290,34 @@
                 }
                 usernameIndexLoaded = true;
             } catch (err) {
-                console.error('Could not load the public username index — falling back to local data for login lookups.', err);
+                console.error('Could not load the legacy username index - username lookups will use the per-name claims only.', err);
             }
         }
 
-        async function saveUsernameIndex() {
+        // Admin sessions only: make sure every roster member with a valid username owns the matching claim.
+        // Idempotent, never overwrites anything, and reports (does not "fix") names that need an Admin's attention.
+        async function backfillUsernameClaims() {
+            if (!USERNAME_CLAIM_BACKFILL || STATE.currentRole !== 'admin') return;
+            const summary = { created: 0, exists: 0, conflict: [], invalid: [] };
             try {
                 await ensureFirebaseReady();
-                USERNAME_INDEX = buildUsernameIndexPayload().map;
-                await window.fb.savePublicDoc('usernameIndex', { map: USERNAME_INDEX });
+                for (const m of STATE.members.slice()) {
+                    if (!m || !m.username || !m.email) continue;
+                    const u = String(m.username).trim().toLowerCase();
+                    if (!USERNAME_RE.test(u)) { summary.invalid.push(m.username); continue; }
+                    const result = await window.fb.claimUsernameAsAdmin(u, m.email);
+                    if (result === 'created') summary.created++;
+                    else if (result === 'exists') summary.exists++;
+                    else summary.conflict.push(u);
+                }
             } catch (err) {
-                console.error('Firestore save failed for the username index', err);
+                console.error('Username claim back-fill stopped early:', err);
+                return;
+            }
+            if (summary.created) console.info(`Username claims created for ${summary.created} existing member(s).`);
+            if (summary.conflict.length || summary.invalid.length) {
+                console.warn('Usernames that need an Admin\'s attention:', summary);
+                showToastNotification(`${summary.conflict.length + summary.invalid.length} member username(s) need attention (duplicate or invalid) - see the browser console for the list.`);
             }
         }
 
@@ -2309,7 +2383,6 @@
                     } else {
                         // First run ever for this project: push the current demo data up.
                         await window.fb.saveCollectionDoc(key, collectionKeyToPayload(key));
-                        if (key === 'members') await saveUsernameIndex();
                     }
                 } catch (err) {
                     console.error('Firestore load failed for', key, '— using local demo data instead.', err);
@@ -2414,7 +2487,7 @@
         // bundled demo data, or the real roster if it's already been loaded this session).
         function resolveLoginEmail(identifier) {
             if (identifier.includes('@')) return identifier;
-            if (USERNAME_INDEX[identifier]) return USERNAME_INDEX[identifier];
+            if (LEGACY_PUBLIC_INDEX_FALLBACK && USERNAME_INDEX[identifier]) return USERNAME_INDEX[identifier];
             const match = STATE.members.find(m => m.username && m.username.toLowerCase() === identifier);
             return match ? match.email : null;
         }
@@ -2797,21 +2870,30 @@
             }
 
             // ---- Work out which email this username belongs to ----
-            let email = resolveLoginEmail(identifier);
-            if (!email && usernameIndexPromise) {
-                // The public username index is still loading in the background — wait for it briefly.
-                try { await withTimeout(usernameIndexPromise, 8000, 'Username lookup timed out'); } catch (idxErr) { /* handled below */ }
+            // The per-name claim (usernames/{name}) is the source of truth. The old public index is only a
+            // temporary fallback for accounts that have not been migrated yet.
+            let email = identifier.includes('@') ? identifier : null;
+            let lookupFailed = false;
+            if (!email) {
+                try {
+                    await ensureFirebaseReady();
+                    email = await withTimeout(window.fb.lookupUsername(identifier), 10000, 'Username lookup timed out');
+                } catch (claimErr) {
+                    lookupFailed = true;
+                    console.error('Username lookup failed:', claimErr);
+                }
+            }
+            if (!email && LEGACY_PUBLIC_INDEX_FALLBACK) {
+                if (usernameIndexPromise) {
+                    try { await withTimeout(usernameIndexPromise, 8000, 'Username lookup timed out'); } catch (idxErr) { /* handled below */ }
+                }
                 email = resolveLoginEmail(identifier);
             }
-            if (!email && !identifier.includes('@')) {
-                // Fallback: the per-username claim made at registration works even before an Admin has
-                // refreshed the shared username index.
-                try { await ensureFirebaseReady(); email = await window.fb.lookupUsername(identifier); } catch (claimErr) { /* handled below */ }
-            }
             if (!email) {
-                showAuthMessage(usernameIndexLoaded
-                    ? 'No account found with that username or email.'
-                    : "Couldn't look up that username right now. Try your email address instead, or check your connection.", 'error');
+                // Same wording as a wrong password, so this screen does not confirm which usernames exist.
+                showAuthMessage(lookupFailed && !usernameIndexLoaded
+                    ? "Couldn't look up that username right now. Try your email address instead, or check your connection."
+                    : 'Incorrect username/email or password. Please check and try again.', 'error');
                 return;
             }
 
@@ -3078,7 +3160,7 @@
                 // race-proof guarantee is the create-only username claim inside completeRegistration().
                 let claimedBy = null;
                 try { claimedBy = await window.fb.lookupUsername(usernameLower); } catch (lookupErr) { /* verified again at the end */ }
-                if (USERNAME_INDEX[usernameLower] || claimedBy) {
+                if ((LEGACY_PUBLIC_INDEX_FALLBACK && USERNAME_INDEX[usernameLower]) || claimedBy) {
                     showAuthMessage('That username is already taken. Please choose another.', 'error');
                     return;
                 }
@@ -3267,6 +3349,8 @@
 
             initApp();
             startRealtimeSync();
+            // Admin sessions quietly make sure every member has a username claim (migration; see USERNAME_CLAIM_BACKFILL).
+            if (STATE.currentRole === 'admin') setTimeout(() => { backfillUsernameClaims(); }, 2500);
 
             // First-login gate: a member whose profile has not been completed yet must
             // fill out the required Complete Member Profile form before doing anything else.
@@ -7112,7 +7196,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             }
         }
 
-        function saveMemberProfileChanges(memberId) {
+        async function saveMemberProfileChanges(memberId) {
             // This form is only ever rendered with editable fields for an Admin (see
             // renderEditorTabBody's disabledAttr / the Account tab, which is Admin-only); this
             // guard stops the save from taking effect even if the function were called directly.
@@ -7140,6 +7224,41 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const username = document.getElementById('editUsername')?.value;
             const bio = document.getElementById('editBio')?.value;
 
+            // Username change: validate, then move the login claim BEFORE touching the roster record, so the
+            // roster and usernames/{name} can never disagree and a taken name is never overwritten.
+            // The old name is released (login by the old name stops working and the name becomes free).
+            let usernameNew = '';
+            const usernameTyped = String(username === undefined ? '' : username).trim().toLowerCase();
+            const usernameOld = String(member.username || '').trim().toLowerCase();
+            if (usernameTyped && usernameTyped !== usernameOld) {
+                if (!USERNAME_RE.test(usernameTyped)) {
+                    appAlert('Username must be 3-30 characters: letters, numbers, dot, dash or underscore only.');
+                    return;
+                }
+                if (RESERVED_USERNAMES.includes(usernameTyped)) {
+                    appAlert('That username is reserved. Please choose another.');
+                    return;
+                }
+                if (STATE.members.some(m => m.id !== member.id && m.username && String(m.username).toLowerCase() === usernameTyped)) {
+                    appAlert('That username is already taken. Please choose another.');
+                    return;
+                }
+                let renamed;
+                try {
+                    await ensureFirebaseReady();
+                    renamed = await window.fb.renameUsernameClaim(usernameOld, usernameTyped, member.email);
+                } catch (claimErr) {
+                    console.error('Could not update the username claim:', claimErr);
+                    appAlert('Could not update the username right now. Please check your connection/permissions and try again.');
+                    return;
+                }
+                if (renamed === 'taken') {
+                    appAlert('That username is already taken. Please choose another.');
+                    return;
+                }
+                usernameNew = usernameTyped;
+            }
+
             // Track field-level changes for the Edit/Activity Log before mutating the record
             const changeLog = [];
             const trackChange = (label, oldVal, newVal) => {
@@ -7162,7 +7281,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             trackChange('Branch', member.branch, branch);
             trackChange('Weight Class', member.weightClass, weight);
             trackChange('Belt Rank', member.belt, belt);
-            trackChange('Username', member.username, username);
+            trackChange('Username', member.username, usernameNew);
             trackChange('Bio / Club Contribution', member.bio, bio);
             trackChange('Member Type', memberTypeLabel(member.memberType), memberType ? memberTypeLabel(memberType) : undefined);
 
@@ -7185,7 +7304,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             if (kukkiwon) member.kukkiwonId = kukkiwon;
             if (branch) member.branch = branch;
             if (weight) member.weightClass = weight;
-            if (username) member.username = username;
+            if (usernameNew) member.username = usernameNew;
             if (bio !== undefined) member.bio = bio.trim();
 
             if (belt && belt !== member.belt) {
@@ -10292,9 +10411,35 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 appAlert('That username is already taken. Please choose another.');
                 return;
             }
+            const usernameLower = username.toLowerCase();
+            if (!USERNAME_RE.test(usernameLower)) {
+                appAlert('Username must be 3-30 characters: letters, numbers, dot, dash or underscore only.');
+                return;
+            }
+            if (RESERVED_USERNAMES.includes(usernameLower)) {
+                appAlert('That username is reserved. Please choose another.');
+                return;
+            }
 
             const submitBtn = e.target.querySelector('button[type="submit"]');
             if (submitBtn) submitBtn.disabled = true;
+
+            // Claim the login username FIRST (create-only, so an existing name can never be taken over).
+            // If creating the login account then fails, the claim is released again below.
+            try {
+                await ensureFirebaseReady();
+                const claim = await window.fb.claimUsernameAsAdmin(usernameLower, email);
+                if (claim !== 'created') {
+                    appAlert('That username is already taken. Please choose another.');
+                    if (submitBtn) submitBtn.disabled = false;
+                    return;
+                }
+            } catch (claimErr) {
+                console.error('Could not reserve the username:', claimErr);
+                appAlert('Could not reserve that username right now. Please check your connection and try again.');
+                if (submitBtn) submitBtn.disabled = false;
+                return;
+            }
 
             // Create the member's real Firebase Auth account up front. This uses a short-lived
             // secondary Auth instance so the Admin stays signed in under their own session —
@@ -10306,6 +10451,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 newMemberUid = await window.fb.registerWithoutSignIn(email, password);
             } catch (err) {
                 console.error('Could not create this member\'s login account:', err);
+                try { await window.fb.releaseUsernameClaim(usernameLower, email); } catch (relErr) { console.error('Could not release the reserved username:', relErr); }
                 const msg = err.code === 'auth/email-already-in-use'
                     ? 'An account with that email already exists.'
                     : 'Could not create this member\'s login account right now. Please check your connection and try again.';
@@ -10318,7 +10464,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             const newMember = {
                 id: newId,
                 name: name,
-                username: username,
+                username: usernameLower,
                 authRole: 'member',
                 memberType: memberType,
                 role: memberType === 'instructor' ? 'Instructor' : (memberType === 'senior' ? 'Senior Member' : 'Member / Student'),
@@ -10354,7 +10500,6 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
 
             recordActivity('Registered Member', newMember, `Admin registered new ${memberTypeLabel(memberType).toLowerCase()} "${name}" with starting rank "${belt}".`);
             persistCollection('members');
-            saveUsernameIndex();
 
             populateUserSelector();
             closeModal();
@@ -10419,6 +10564,12 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             let saved = true;
             try { await persistCollectionStrict('members'); } catch (err) { saved = false; console.error('Permanent delete save failed:', err); }
 
+            // Release the username so it can be used again (best effort; only deletes a claim that points at this member's email).
+            if (saved && member.username) {
+                try { await window.fb.releaseUsernameClaim(String(member.username).toLowerCase(), member.email); }
+                catch (relErr) { console.error('Could not release the username claim:', relErr); }
+            }
+
             showToastNotification(saved
                 ? 'Member record permanently deleted.'
                 : 'Removed locally, but could not confirm the delete was saved to the server — check your connection/permissions.');
@@ -10430,8 +10581,8 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
         // ================= APP BOOT SEQUENCE (Firebase-aware) =================
         // Runs once on page load, behind #bootLoadingOverlay, so the login screen never
         // flashes for someone who is already signed in on this device/browser:
-        //   1. Load the small public username->email index (readable pre-login) so the
-        //      login form can resolve a username even before anyone signs in.
+        //   1. (Legacy fallback only) load the old public username index. Normal username logins read
+        //      ONE usernames/{name} claim at sign-in time instead.
         //   2. Ask Firebase Auth whether there's already a signed-in session.
         //   3. Only once signed in do we pull the real, protected club data down from
         //      Firestore (loadClubDataFromFirestore) — those documents require auth to
