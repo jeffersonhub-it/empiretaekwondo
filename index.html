@@ -29,6 +29,7 @@
            html/body background-color fade, etc.) all start recalculating style at the
            exact same frame as the big DOM swap, which is what shows up as a flash/flicker.
            #bootLoadingOverlay is excluded so its own opacity fade-out still animates. */
+        html.no-anim,
         html.no-anim *:not(#bootLoadingOverlay):not(#bootLoadingOverlay *) {
             transition: none !important;
             animation: none !important;
