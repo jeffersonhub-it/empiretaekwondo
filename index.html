@@ -4934,12 +4934,32 @@
         }
 
         // Preview of the most recent posts, shown inside "About the Club" below Total Medals.
+        // Capped at 2 so the 2-column grid always stays a clean, even 2x1 — a 3rd/4th card
+        // used to spill onto its own row and look like it was overlapping. Any extra posts
+        // beyond that just get a "+N more" indicator over the last visible card instead.
         function aboutClubPostsPreviewHtml() {
-            const recent = [...STATE.posts].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 4);
+            const sorted = [...STATE.posts].sort((a, b) => new Date(b.date) - new Date(a.date));
+            const PREVIEW_MAX = 2;
+            const recent = sorted.slice(0, PREVIEW_MAX);
+            const extraCount = sorted.length - recent.length;
             if (!recent.length) return `<p class="text-xs text-gray-500">No posts yet — be the first to share a photo!</p>`;
             return `
                 <div class="grid grid-cols-2 gap-2.5">
-                    ${recent.map(p => postCardHtml(p, true)).join('')}
+                    ${recent.map((p, i) => {
+                        const isLast = i === recent.length - 1;
+                        if (!isLast || extraCount <= 0) return postCardHtml(p, true);
+                        // Overlay a "+N more" indicator on the last visible card instead of
+                        // rendering a 3rd/4th card that would spill the grid.
+                        return `
+                            <div class="relative">
+                                ${postCardHtml(p, true)}
+                                <button onclick="goToNavItem('posts')" title="View all posts" class="absolute inset-0 rounded-2xl bg-black/70 hover:bg-black/80 transition-all flex flex-col items-center justify-center gap-1 text-white pointer-events-auto">
+                                    <span class="text-lg font-black">+${extraCount}</span>
+                                    <span class="text-[10px] font-bold uppercase tracking-wide">More</span>
+                                </button>
+                            </div>
+                        `;
+                    }).join('')}
                 </div>
             `;
         }
