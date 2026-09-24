@@ -2379,8 +2379,11 @@
             if (realtimeRenderDebounce) clearTimeout(realtimeRenderDebounce);
             realtimeRenderDebounce = setTimeout(() => {
                 realtimeRenderDebounce = null;
+                const root = document.documentElement;
+                root.classList.add('no-anim');
                 renderSidebarNav();
                 renderView(STATE.currentView);
+                requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('no-anim')));
             }, 150);
         }
 
