@@ -2274,8 +2274,8 @@
         const USERNAME_RE = /^[a-z0-9._-]{3,30}$/;
         // MIGRATION SWITCHES - once every member has a claim (an Admin has logged in with no warnings), set
         // both to false and delete publicIndex/usernameIndex in the Firebase Console.
-        const LEGACY_PUBLIC_INDEX_FALLBACK = true;   // still read the old public index if a claim is missing
-        const USERNAME_CLAIM_BACKFILL = true;        // Admin sessions create claims for members that lack one
+        const LEGACY_PUBLIC_INDEX_FALLBACK = false;   // still read the old public index if a claim is missing
+        const USERNAME_CLAIM_BACKFILL = false;        // Admin sessions create claims for members that lack one
         let USERNAME_INDEX = {};                     // legacy fallback data only
         let usernameIndexLoaded = false;             // true once the legacy index was fetched (or is switched off)
         let usernameIndexPromise = null;             // background load started by bootApp(); login waits on it if needed
