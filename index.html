@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="dark no-anim">
 <head>
 <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,6 +22,24 @@
             background: #0A0A0C; color: #fff; text-align: center; font-family: Nunito, Inter, system-ui, sans-serif; }
         #bootLoadingOverlay.hidden { display: none; }
         #authScreen button[type="submit"]:not(:disabled):active { transform: scale(.98); }
+        /* Kill every transition/animation on the page while html.no-anim is present.
+           This is what stops the flicker: without it, the moment the boot overlay is
+           removed (on refresh) or #app is revealed (right after login), dozens of
+           unrelated CSS transitions (hover states, card borders, nav pills, the global
+           html/body background-color fade, etc.) all start recalculating style at the
+           exact same frame as the big DOM swap, which is what shows up as a flash/flicker.
+           #bootLoadingOverlay is excluded so its own opacity fade-out still animates. */
+        html.no-anim *:not(#bootLoadingOverlay):not(#bootLoadingOverlay *) {
+            transition: none !important;
+            animation: none !important;
+        }
+        /* Same idea, scoped to just the results area: used while a search box re-renders
+           its list so the fresh cards don't all replay their entrance animation at once. */
+        #mainViewport.no-anim, #mainViewport.no-anim *,
+        #membersTbody.no-anim, #membersTbody.no-anim * {
+            transition: none !important;
+            animation: none !important;
+        }
     </style>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -3251,6 +3269,14 @@
         // session being restored on page load (see bootApp), rather than someone actually
         // submitting the login form — in that case we skip logging a brand-new check-in.
         function completeLogin(account, isResumedSession) {
+            // Freeze all transitions/animations while we swap authScreen -> #app and run
+            // initApp()'s big synchronous render below, then let them back in a couple of
+            // frames later. Stops the post-login flicker caused by many unrelated CSS
+            // transitions all kicking in at once on the same frame as that DOM swap.
+            const root = document.documentElement;
+            root.classList.add('no-anim');
+            requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('no-anim')));
+
             STATE.auth.isLoggedIn = true;
             STATE.auth.userId = account.id;
             STATE.currentRole = account.authRole === 'admin' ? 'admin' : 'member';
@@ -5772,7 +5798,7 @@
                     <div class="glass-panel rounded-2xl p-4 flex flex-wrap gap-3 items-center">
                         <div class="relative flex-1 min-w-[200px] max-w-sm">
                             <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs"></i>
-                            <input type="text" id="memberFilterSearch" oninput="filterMembersTable()" placeholder="Search name or rank..." class="w-full bg-brand-dark/80 border border-brand-border text-xs rounded-xl pl-9 pr-3.5 py-2.5 text-white focus:outline-none focus:border-brand-red transition-all">
+                            <input type="text" id="memberFilterSearch" oninput="debouncedFilterMembersTable()" placeholder="Search name or rank..." class="w-full bg-brand-dark/80 border border-brand-border text-xs rounded-xl pl-9 pr-3.5 py-2.5 text-white focus:outline-none focus:border-brand-red transition-all">
                         </div>
                         <select id="beltFilterSelect" onchange="filterMembersTable()" class="bg-brand-dark/80 border border-brand-border text-xs rounded-xl px-3 py-2.5 text-gray-300 focus:outline-none focus:border-brand-red">
                             <option value="">All Belt Ranks</option>
@@ -5902,6 +5928,36 @@
 
         // Simple search (name or rank) + belt/member-type filter, shared by both roles.
         function filterMembersTable() {
+            renderWithoutFlicker('membersTbody', () => filterMembersTableNow());
+        }
+        const debouncedFilterMembersTable = debounce(filterMembersTable, 200);
+
+        // Small delay so a full-view re-render fires once the person pauses typing
+        // instead of on every single keystroke — the main source of the search flicker.
+        function debounce(fn, wait) {
+            let t;
+            return function (...args) {
+                clearTimeout(t);
+                t = setTimeout(() => fn.apply(this, args), wait);
+            };
+        }
+
+        // Wraps a render call so the container's CSS transitions/animations are switched
+        // off for the couple of frames it takes to swap in the new HTML, then switched
+        // back on. Without this, every card in the freshly-rebuilt list replays its
+        // entrance/hover transition at the same instant, which is what looks like a
+        // flicker while typing in a search box.
+        function renderWithoutFlicker(containerId, renderFn) {
+            const el = document.getElementById(containerId);
+            if (el) el.classList.add('no-anim');
+            renderFn();
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                const el2 = document.getElementById(containerId);
+                if (el2) el2.classList.remove('no-anim');
+            }));
+        }
+
+        function filterMembersTableNow() {
             const tbody = document.getElementById('membersTbody');
             if (!tbody) return;
 
@@ -7487,7 +7543,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                     <div class="glass-panel p-4 rounded-2xl border border-brand-border flex flex-wrap gap-3 items-end">
                         <div class="w-full sm:w-auto sm:max-w-[220px]">
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Search</label>
-                            <input type="text" id="achSearchInput" value="${f.search}" oninput="updateAchievementFilter('search', this.value)" placeholder="Search..." class="w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
+                            <input type="text" id="achSearchInput" value="${f.search}" oninput="debouncedUpdateAchievementSearch(this.value)" placeholder="Search..." class="w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Medal Category</label>
@@ -7552,7 +7608,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
         function updateAchievementFilter(key, value) {
             STATE.achievementFilters[key] = value;
             const shouldRefocus = key === 'search';
-            renderAchievementsView(document.getElementById('mainViewport'));
+            renderWithoutFlicker('mainViewport', () => renderAchievementsView(document.getElementById('mainViewport')));
             if (shouldRefocus) {
                 const input = document.getElementById('achSearchInput');
                 if (input) {
@@ -7563,6 +7619,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 }
             }
         }
+        const debouncedUpdateAchievementSearch = debounce((v) => updateAchievementFilter('search', v), 200);
 
         function resetAchievementFilters() {
             STATE.achievementFilters = { search: '', medal: 'All', category: 'All', scope: 'All', tournament: 'All', year: 'All' };
@@ -7859,7 +7916,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                     <div class="glass-panel p-4 rounded-2xl border border-brand-border flex flex-wrap gap-3 items-end">
                         <div class="flex-1 min-w-[200px]">
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Search</label>
-                            <input type="text" id="tourSearchInput" value="${f.search}" oninput="updateTournamentFilter('search', this.value)" placeholder="Search title or location..." class="w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
+                            <input type="text" id="tourSearchInput" value="${f.search}" oninput="debouncedUpdateTournamentSearch(this.value)" placeholder="Search title or location..." class="w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Year</label>
@@ -7933,7 +7990,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
         function updateTournamentFilter(key, value) {
             STATE.tournamentFilters[key] = value;
             const shouldRefocus = key === 'search';
-            renderTournamentsView(document.getElementById('mainViewport'));
+            renderWithoutFlicker('mainViewport', () => renderTournamentsView(document.getElementById('mainViewport')));
             if (shouldRefocus) {
                 const input = document.getElementById('tourSearchInput');
                 if (input) {
@@ -7944,6 +8001,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 }
             }
         }
+        const debouncedUpdateTournamentSearch = debounce((v) => updateTournamentFilter('search', v), 200);
 
         function resetTournamentFilters() {
             STATE.tournamentFilters = { search: '', year: 'All', status: 'All', type: 'All' };
@@ -8350,7 +8408,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                     <div class="glass-panel p-4 rounded-2xl border border-brand-border flex flex-wrap gap-3 items-end">
                         <div class="flex-1 min-w-[200px]">
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Search</label>
-                            <input type="text" id="certSearchInput" value="${f.search}" oninput="updateCertificateFilter('search', this.value)" placeholder="Search member, certificate #, or rank..." class="w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
+                            <input type="text" id="certSearchInput" value="${f.search}" oninput="debouncedUpdateCertificateSearch(this.value)" placeholder="Search member, certificate #, or rank..." class="w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Type</label>
@@ -8424,7 +8482,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
         function updateCertificateFilter(key, value) {
             STATE.certificateFilters[key] = value;
             const shouldRefocus = key === 'search';
-            renderCertificatesView(document.getElementById('mainViewport'));
+            renderWithoutFlicker('mainViewport', () => renderCertificatesView(document.getElementById('mainViewport')));
             if (shouldRefocus) {
                 const input = document.getElementById('certSearchInput');
                 if (input) {
@@ -8435,6 +8493,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                 }
             }
         }
+        const debouncedUpdateCertificateSearch = debounce((v) => updateCertificateFilter('search', v), 200);
 
         function resetCertificateFilters() {
             STATE.certificateFilters = { search: '', type: 'All', year: 'All' };
@@ -8795,7 +8854,7 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
                     <div class="glass-panel p-4 rounded-2xl border border-brand-border flex flex-wrap gap-3 items-end">
                         <div class="flex-1 min-w-[200px]">
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Search</label>
-                            <input type="text" id="annSearchInput" value="${f.search}" oninput="updateAnnouncementFilter('search', this.value)" placeholder="Search by title or description..." class="w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
+                            <input type="text" id="annSearchInput" value="${f.search}" oninput="debouncedUpdateAnnouncementSearch(this.value)" placeholder="Search by title or description..." class="w-full bg-brand-dark border border-brand-border rounded-xl px-3 py-2 text-xs text-white mt-1 focus:outline-none focus:border-brand-red">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Category</label>
@@ -8861,8 +8920,9 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
 
         function updateAnnouncementFilter(key, value) {
             STATE.announcementFilters[key] = value;
-            renderAnnouncementsView(document.getElementById('mainViewport'));
+            renderWithoutFlicker('mainViewport', () => renderAnnouncementsView(document.getElementById('mainViewport')));
         }
+        const debouncedUpdateAnnouncementSearch = debounce((v) => updateAnnouncementFilter('search', v), 200);
 
         function resetAnnouncementFilters() {
             STATE.announcementFilters = { search: '', category: 'All' };
@@ -10399,7 +10459,11 @@ ${detailLines.map((t, i) => `<text x="421" y="${detailY + i * 20}" text-anchor="
             // Fade out instead of vanishing abruptly.
             overlay.style.opacity = '0';
             overlay.style.pointerEvents = 'none';
-            setTimeout(() => { overlay.classList.add('hidden'); overlay.style.display = 'none'; }, 450);
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+                overlay.style.display = 'none';
+                document.documentElement.classList.remove('no-anim');
+            }, 450);
         }
 
         // Fills the public "Who We Are / History / Mission / Vision / Contact" block shown on the
