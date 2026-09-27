@@ -3490,9 +3490,18 @@
             // initApp()'s big synchronous render below, then let them back in a couple of
             // frames later. Stops the post-login flicker caused by many unrelated CSS
             // transitions all kicking in at once on the same frame as that DOM swap.
+            //
+            // For a RESUMED session (auto-login while #bootLoadingOverlay is still fading
+            // out) we deliberately do NOT unfreeze here — hideBootOverlay() removes
+            // 'no-anim' itself once its 450ms fade finishes. Unfreezing early used to race
+            // with that fade: the app underneath already had hover/transition states live
+            // again while still visible through the semi-transparent overlay, which is
+            // what showed up as a flicker right after logging in.
             const root = document.documentElement;
             root.classList.add('no-anim');
-            requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('no-anim')));
+            if (!isResumedSession) {
+                requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('no-anim')));
+            }
 
             STATE.auth.isLoggedIn = true;
             STATE.auth.userId = account.id;
